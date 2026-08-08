@@ -5,6 +5,7 @@ import { AuthService } from "../services/authService";
 import { ResponsibilityService } from "../services/responsibilityService";
 import { toast } from "../utils/toast";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
+import { SortableTableHeader, sortTableRows, toggleTableSort } from "../components/common/SortableTableHeader";
 
 const permissionFields = [
   ["can_create", "Create"], ["can_read", "Read"], ["can_update", "Update"], ["can_delete", "Delete"], ["can_approve", "Approve"]
@@ -18,6 +19,8 @@ export const ResponsibilitiesPage = () => {
   const [accessByModule, setAccessByModule] = useState({});
   const [dirtyModuleIds, setDirtyModuleIds] = useState(() => new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("nama_module"); const [sortOrder, setSortOrder] = useState("asc");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -54,12 +57,13 @@ export const ResponsibilitiesPage = () => {
   const selectedRole = roles.find((role) => String(role.id_role) === selectedRoleId);
   const allVisibleModules = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return modules;
-    return modules.filter((module) => [module.id_module, module.kode_module, module.nama_module, module.deskripsi]
-      .some((value) => String(value ?? "").toLowerCase().includes(query)));
-  }, [modules, searchQuery]);
-  const pagination = useDataPagination(allVisibleModules, [searchQuery, selectedRoleId]);
+    const matches = modules.filter((module) => (statusFilter === "all" || (module.is_active || "Y") === statusFilter) && (!query || [module.id_module, module.kode_module, module.nama_module, module.deskripsi]
+      .some((value) => String(value ?? "").toLowerCase().includes(query))));
+    return sortTableRows(matches, sortBy, sortOrder, { id_module: (m) => Number(m.id_module) });
+  }, [modules, searchQuery, statusFilter, sortBy, sortOrder]);
+  const pagination = useDataPagination(allVisibleModules, [searchQuery, selectedRoleId, statusFilter, sortBy, sortOrder]);
   const visibleModules = pagination.paginatedItems;
+  const handleSort = (field) => toggleTableSort(field, sortBy, sortOrder, setSortBy, setSortOrder);
 
   const togglePermission = (moduleId, field) => {
     const key = String(moduleId);
@@ -110,12 +114,12 @@ export const ResponsibilitiesPage = () => {
 
     <div className="grid grid-cols-1 md:grid-cols-[minmax(240px,360px)_1fr] gap-3">
       <label className="space-y-1.5"><span className="text-xs font-bold text-slate-700">Pilih Role</span><select value={selectedRoleId} onChange={(e) => setSelectedRoleId(e.target.value)} className="form-input">{roles.map((role) => <option key={role.id_role} value={role.id_role}>{role.nama_role} — {role.kode_role || `ID ${role.id_role}`}</option>)}</select></label>
-      <div className="relative self-end"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Cari module..." className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-100" /></div>
+      <div className="flex gap-2 self-end"><div className="relative flex-1"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Cari module..." className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-100" /></div><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select></div>
     </div>
 
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><Summary label="Role Aktif" value={selectedRole?.nama_role || "-"} icon={ShieldCheck} /><Summary label="Module Bisa Dibaca" value={`${grantedReadCount} / ${modules.length}`} icon={Check} /><Summary label="Perubahan Belum Disimpan" value={dirtyModuleIds.size} icon={Save} /></div>
 
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm"><table className="w-full min-w-[1000px] text-xs"><thead className="bg-slate-50 text-slate-600 uppercase tracking-wider"><tr><th className="px-4 py-3 text-left">Module</th>{permissionFields.map(([, label]) => <th key={label} className="px-3 py-3 text-center w-24">{label}</th>)}<th className="px-3 py-3 text-center w-28">Semua</th></tr></thead><tbody className="divide-y divide-slate-100">
+    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm"><table className="w-full min-w-[1000px] text-xs"><thead className="bg-slate-50 text-slate-600 uppercase tracking-wider"><tr><SortableTableHeader field="nama_module" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Module</SortableTableHeader>{permissionFields.map(([, label]) => <th key={label} className="px-3 py-3 text-center w-24">{label}</th>)}<th className="px-3 py-3 text-center w-28">Semua</th></tr></thead><tbody className="divide-y divide-slate-100">
       {isLoading && <tr><td colSpan="7" className="px-4 py-14 text-center text-slate-500"><LoaderCircle className="w-5 h-5 animate-spin inline mr-2" />Memuat akses role...</td></tr>}
       {!isLoading && visibleModules.map((module) => { const row = accessByModule[String(module.id_module)] || emptyPermissions; const allEnabled = permissionFields.every(([field]) => row[field] === "Y"); const dirty = dirtyModuleIds.has(String(module.id_module)); return <tr key={module.id_module} className={dirty ? "bg-amber-50/60" : "hover:bg-slate-50"}><td className="px-4 py-3"><div className="flex items-start gap-3"><span className="mt-0.5 px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-black">#{module.id_module}</span><div><div className="font-black text-slate-900">{module.nama_module}</div><div className="text-[10px] font-mono text-indigo-600 mt-0.5">{module.kode_module}</div><div className="text-[11px] text-slate-500 mt-1 max-w-2xl">{module.deskripsi || "-"}</div></div></div></td>{permissionFields.map(([field, label]) => <td key={field} className="px-3 py-3 text-center"><PermissionButton active={row[field] === "Y"} label={label} onClick={() => togglePermission(module.id_module, field)} /></td>)}<td className="px-3 py-3 text-center"><button onClick={() => setAllForModule(module.id_module, !allEnabled)} className={`px-3 py-2 rounded-lg font-black ${allEnabled ? "bg-rose-50 text-rose-600 hover:bg-rose-100" : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"}`}>{allEnabled ? "Matikan" : "Aktifkan"}</button></td></tr>; })}
       {!isLoading && visibleModules.length === 0 && <tr><td colSpan="7" className="px-4 py-12 text-center text-slate-500">Module tidak ditemukan.</td></tr>}

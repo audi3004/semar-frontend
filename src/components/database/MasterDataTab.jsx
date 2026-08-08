@@ -98,14 +98,14 @@ export const MasterDataTab = ({ currentUser: propCurrentUser, onRefreshData }) =
   const fetchGridData = async () => {
     setIsLoading(true);
     try {
-      const activeOnly = activeFilter === "Y" ? true : undefined;
       const params = {
         search: searchQuery,
-        activeOnly,
+        is_active: activeFilter === "ALL" ? undefined : activeFilter,
+        activeFilter,
         page: currentPage,
         limit: itemsPerPage,
-        sortBy: sortBy || MasterDataService.getPrimaryKeyName(selectedTable),
-        sortOrder
+        sort_by: sortBy || MasterDataService.getPrimaryKeyName(selectedTable),
+        sort_order: sortOrder
       };
       
       const result = await MasterDataService.fetchApiAll(selectedTable, params);

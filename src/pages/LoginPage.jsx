@@ -46,10 +46,10 @@ export const LoginPage = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleQuickLogin = (user) => {
+  const handleQuickLogin = async (user) => {
     setIdentifierInput(user.nip);
     setPasswordInput(user.password || "123456");
-    const res = AuthService.login(user.nip, user.password || "123456");
+    const res = await AuthService.login(user.nip, user.password || "123456");
     if (res.success) {
       toast.success(`Login Cepat Berhasil sebagai ${user.name}!`);
       onLoginSuccess();

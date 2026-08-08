@@ -121,6 +121,18 @@ apiClient.interceptors.response.use(
 export const api = {
   client: apiClient,
 
+  // Dashboard analytics - data sudah dibatasi backend berdasarkan user, role, dan unitRole.
+  getDashboardTransactions: async (params = {}) => {
+    const res = await apiClient.get("/dashboard/transactions", { params });
+    return res.data?.data || {
+      lembur: [],
+      cuti: [],
+      ijin: [],
+      sakit: [],
+      sppd: []
+    };
+  },
+
   // Reset cache / storage helper
   resetCache: async () => {
     try {
@@ -208,6 +220,10 @@ export const api = {
   },
   getMyUnitRoles: async () => {
     const res = await apiClient.get("/unit-role/me");
+    return res.data?.data || [];
+  },
+  getUnitRolesByUser: async (userId, params = {}) => {
+    const res = await apiClient.get(`/unit-role/user/${userId}`, { params });
     return res.data?.data || [];
   },
 

@@ -3,11 +3,15 @@ import { MasterDataService } from "../services/masterDataService";
 import { Award, Plus, Search, Edit2, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
+import { SortableTableHeader, sortTableRows, toggleTableSort } from "../components/common/SortableTableHeader";
 
 export const JabatanPage = ({ currentUser, onRefreshData }) => {
   const [jabatans, setJabatans] = useState([]);
   const [projects, setProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("nama_jabatan"); const [sortOrder, setSortOrder] = useState("asc");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [formError, setFormError] = useState("");
@@ -35,14 +39,17 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
     return found ? found.nama_project : `Project #${projId}`;
   };
 
-  const filteredJabatans = jabatans.filter((j) => {
+  const filteredJabatans = sortTableRows(jabatans.filter((j) => {
+    if (projectFilter !== "all" && String(j.id_project) !== projectFilter) return false;
+    if (statusFilter !== "all" && (j.is_active || j.active || "Y") !== statusFilter) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     const matchJab = j.nama_jabatan?.toLowerCase().includes(q);
     const matchProj = getProjectName(j.id_project)?.toLowerCase().includes(q);
     return matchJab || matchProj;
-  });
-  const pagination = useDataPagination(filteredJabatans, [searchQuery]);
+  }), sortBy, sortOrder, { id_jabatan: (j) => Number(j.id_jabatan), project: (j) => getProjectName(j.id_project), is_active: (j) => j.is_active || j.active || "Y" });
+  const pagination = useDataPagination(filteredJabatans, [searchQuery, projectFilter, statusFilter, sortBy, sortOrder]);
+  const handleSort = (field) => toggleTableSort(field, sortBy, sortOrder, setSortBy, setSortOrder);
 
   const handleOpenAdd = () => {
     setEditingItem(null);
@@ -146,7 +153,7 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
-        <span className="text-xs text-slate-500 font-bold">Total Jabatan: {filteredJabatans.length} Posisi</span>
+        <div className="flex flex-wrap items-center gap-2"><select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Project</option>{projects.map((project) => <option key={project.id_project} value={project.id_project}>{project.nama_project}</option>)}</select><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select><span className="text-xs text-slate-500 font-bold">Total Jabatan: {filteredJabatans.length} Posisi</span></div>
       </div>
 
       {/* Table */}
@@ -155,10 +162,10 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black uppercase text-slate-500 tracking-wider">
-                <th className="p-3.5 pl-5">ID Jabatan</th>
-                <th className="p-3.5">Nama Jabatan / Posisi</th>
-                <th className="p-3.5">Proyek Kerja (FK Project)</th>
-                <th className="p-3.5">Status</th>
+                <SortableTableHeader field="id_jabatan" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5 pl-5">ID Jabatan</SortableTableHeader>
+                <SortableTableHeader field="nama_jabatan" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5">Nama Jabatan / Posisi</SortableTableHeader>
+                <SortableTableHeader field="project" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5">Proyek Kerja (FK Project)</SortableTableHeader>
+                <SortableTableHeader field="is_active" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5">Status</SortableTableHeader>
                 <th className="p-3.5 pr-5 text-center">Aksi</th>
               </tr>
             </thead>

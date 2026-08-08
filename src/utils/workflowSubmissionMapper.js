@@ -27,6 +27,15 @@ const common = (item, type, id) => {
   const latestRevision = [...workflowHistory].reverse().find(
     (entry) => String(entry.aksi || "").toUpperCase() === "REVISION"
   );
+  const directUnit = item.petugas?.unit;
+  const parentUnit = directUnit?.indukUnit;
+  const rootUnit = parentUnit?.indukUnit;
+  const unitHierarchy = [directUnit, parentUnit, rootUnit]
+    .filter(Boolean)
+    .map((unit) => ({ id: unit.id_unit, name: unit.nama_unit }));
+  const findUnitName = (pattern, fallback = "") =>
+    unitHierarchy.find((unit) => pattern.test(String(unit.name || "")))?.name || fallback;
+  const directUnitName = directUnit?.nama_unit || "-";
 
   return {
     ...item,
@@ -36,8 +45,10 @@ const common = (item, type, id) => {
     employeeName: item.petugas?.nama || "-",
     employeeJabatan: item.petugas?.jabatan?.nama_jabatan || "-",
     id_unit: item.petugas?.id_unit ?? item.petugas?.unit?.id_unit,
-    unitUpt: item.petugas?.unit?.nama_unit || "-",
-    garduInduk: item.petugas?.unit?.nama_unit || "-",
+    unitHierarchy,
+    unitUpt: findUnitName(/\b(UP|UPT|UNIT PELAKSANA)\b/i, rootUnit?.nama_unit || directUnitName),
+    unitUltg: findUnitName(/\bULTG\b/i, parentUnit?.nama_unit || ""),
+    garduInduk: findUnitName(/\b(GI|GARDU INDUK)\b/i, directUnitName),
     status: workflowStatus(item),
     currentApproverRole: workflowRole(item),
     workflowHistory,
@@ -55,9 +66,13 @@ export const mapWorkflowLembur = (item) => ({
   jamMulai: String(item.jam_mulai || "").slice(0, 5),
   jamSelesai: String(item.jam_selesai || "").slice(0, 5),
   durasiJam: Number(item.total_jam || 0),
+  jumlahJamKoreksi: Number(item.jumlah_jam_koreksi ?? item.total_jam ?? 0),
+  catatanKoreksi: item.catatan_koreksi || "",
   kategoriLembur: item.kategori_lembur || "",
   jenisPekerjaan: item.jenis_pekerjaan || "",
+  areaGroup: item.area_group || item.petugas?.unit?.nama_unit || "",
   kegiatanDetail: item.detail_pekerjaan_lembur || "",
+  estimasiBiayaRupiah: Number(item.estimasi_biaya_rupiah || item.total_biaya || 0),
   isHariLibur: item.is_hari_libur === "Y",
   makerSignatureUrl: item.maker_signature || ""
 });
@@ -124,6 +139,7 @@ export const mapWorkflowSppd = (item) => {
     durasiHari: Number(item.lama_dinas || 1),
     bebanAnggaranUnit: item.beban_anggaran || "",
     expenses,
+    totalBiaya: expenses.reduce((sum, expense) => sum + expense.nominal, 0),
     totalEstimasiBiaya: expenses.reduce((sum, expense) => sum + expense.nominal, 0),
     makerSignatureUrl: item.maker_signature || ""
   };

@@ -1,20 +1,33 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, ShieldCheck } from "lucide-react";
-import { MasterDataService } from "../services/masterDataService";
+import { api } from "../services/api";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
+import { SortableTableHeader, sortTableRows, toggleTableSort } from "../components/common/SortableTableHeader";
 
 export const RolesPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const roles = MasterDataService.getAll("m_role", { limit: 1000 }).data || [];
+  const [roles, setRoles] = useState([]);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("level_role");
+  const [sortOrder, setSortOrder] = useState("asc");
+  useEffect(() => {
+    api.client.get("/roles", { params: { limit: 1000 } })
+      .then((response) => setRoles(response.data?.data || []))
+      .catch(() => setRoles([]));
+  }, []);
   const filteredRoles = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return roles;
-    return roles.filter((role) =>
+    const matches = roles.filter((role) =>
+      (statusFilter === "all" || (role.is_active || "Y") === statusFilter) &&
+      (!query ||
       [role.id_role, role.kode_role, role.nama_role, role.level_role]
         .some((value) => String(value ?? "").toLowerCase().includes(query))
+      )
     );
-  }, [roles, searchQuery]);
-  const pagination = useDataPagination(filteredRoles, [searchQuery]);
+    return sortTableRows(matches, sortBy, sortOrder, { id_role: (r) => Number(r.id_role), level_role: (r) => Number(r.level_role) });
+  }, [roles, searchQuery, statusFilter, sortBy, sortOrder]);
+  const pagination = useDataPagination(filteredRoles, [searchQuery, statusFilter, sortBy, sortOrder]);
+  const handleSort = (field) => toggleTableSort(field, sortBy, sortOrder, setSortBy, setSortOrder);
 
   return (
     <div className="p-3 sm:p-6 space-y-5">
@@ -25,7 +38,7 @@ export const RolesPage = () => {
         <p className="text-xs text-slate-600 mt-1">Data role pengguna dari endpoint backend.</p>
       </div>
 
-      <div className="relative max-w-md">
+      <div className="flex flex-col sm:flex-row gap-2"><div className="relative flex-1 max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           value={searchQuery}
@@ -33,18 +46,18 @@ export const RolesPage = () => {
           placeholder="Cari kode atau nama role..."
           className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-100"
         />
-      </div>
+      </div><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select></div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider">
             <tr>
-              <th className="px-4 py-3 text-left">ID</th>
-              <th className="px-4 py-3 text-left">Kode Role</th>
-              <th className="px-4 py-3 text-left">Nama Role</th>
-              <th className="px-4 py-3 text-center">Level</th>
-              <th className="px-4 py-3 text-center">Super Admin</th>
-              <th className="px-4 py-3 text-center">Status</th>
+              <SortableTableHeader field="id_role" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">ID</SortableTableHeader>
+              <SortableTableHeader field="kode_role" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Kode Role</SortableTableHeader>
+              <SortableTableHeader field="nama_role" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Nama Role</SortableTableHeader>
+              <SortableTableHeader field="level_role" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3">Level</SortableTableHeader>
+              <SortableTableHeader field="is_super_admin" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3">Super Admin</SortableTableHeader>
+              <SortableTableHeader field="is_active" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3">Status</SortableTableHeader>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">

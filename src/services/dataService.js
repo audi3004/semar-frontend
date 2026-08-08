@@ -16,6 +16,110 @@ export class DataService {
    * Helper to check if any active user/employee is assigned to the verification role.
    * If empty or unassigned, workflow transitions directly from checker to approval 1.
    */
+
+  static getDefaultReportSignatories(unitName = "") {
+    let unitClean = unitName || "UPT Semarang";
+    let checkerUser = null;
+    let approval1User = null;
+
+    try {
+      const authUsers = AuthService.getUsers() || [];
+      let masterPegawai = [];
+      try {
+        masterPegawai = MasterDataService.getAll("m_pegawai", { limit: 1000 })?.data || [];
+      } catch {
+        // ignore
+      }
+
+      const isMatch = (uUpt) => {
+        if (!unitName || unitName === "Seluruh UPT" || unitName === "all") return true;
+        if (!uUpt) return true;
+        const uLower = uUpt.toLowerCase();
+        const selLower = unitName.toLowerCase();
+        return uLower.includes(selLower) || selLower.includes(uLower);
+      };
+
+      // Search Checker in authUsers
+      checkerUser = authUsers.find((u) => {
+        const r = (u.role || u.sub_role || "").toLowerCase();
+        return (r === "checker" || r.includes("checker")) && isMatch(u.unitUpt || u.unit_upt);
+      });
+      if (!checkerUser) {
+        checkerUser = authUsers.find((u) => {
+          const r = (u.role || u.sub_role || "").toLowerCase();
+          return r === "checker" || r.includes("checker");
+        });
+      }
+      if (!checkerUser && masterPegawai.length > 0) {
+        const peg = masterPegawai.find((p) => (p.role || "").toLowerCase().includes("checker"));
+        if (peg) {
+          checkerUser = {
+            name: peg.nama || peg.name,
+            nip: peg.nip,
+            jabatan: peg.jabatan
+          };
+        }
+      }
+
+      // Search Approval 1 in authUsers
+      approval1User = authUsers.find((u) => {
+        const r = (u.role || u.sub_role || "").toLowerCase();
+        return (r === "approved1" || r === "approval1" || r === "approval 1" || r.includes("approved1")) && isMatch(u.unitUpt || u.unit_upt);
+      });
+      if (!approval1User) {
+        approval1User = authUsers.find((u) => {
+          const r = (u.role || u.sub_role || "").toLowerCase();
+          return r === "approved1" || r === "approval1" || r === "approval 1" || r.includes("approved1");
+        });
+      }
+      if (!approval1User && masterPegawai.length > 0) {
+        const peg = masterPegawai.find((p) =>
+          (p.role || "").toLowerCase().includes("approved1") || (p.role || "").toLowerCase().includes("approval1")
+        );
+        if (peg) {
+          approval1User = {
+            name: peg.nama || peg.name,
+            nip: peg.nip,
+            jabatan: peg.jabatan
+          };
+        }
+      }
+    } catch (e) {
+      console.warn("Error getting default report signatories:", e);
+    }
+
+    const cleanName = (n) => {
+      if (!n) return "";
+      return n.replace(/\s*\((Checker|Approval \d+|Maker|Approved \d+)\)/gi, "").trim();
+    };
+
+    const checkerName = cleanName(checkerUser?.name || checkerUser?.nama) || "AHMAD DANI";
+    const checkerNip = checkerUser?.nip || "8534567X";
+    const checkerJabatan = checkerUser?.jabatan || `Team Leader (TL) PLN Pemeliharaan GI`;
+
+    const app1Name = cleanName(approval1User?.name || approval1User?.nama) || "IR. BAMBANG SUTO";
+    const app1Nip = approval1User?.nip || "7823411V";
+    const app1Jabatan = approval1User?.jabatan || `Manager (MAN) UPT PLN JATENG DIY`;
+
+    return [
+      {
+        positionLabel: "Posisi 1 (Kiri - Diverifikasi Oleh)",
+        title: "DIVERIFIKASI OLEH",
+        role: "Checker",
+        name: checkerName,
+        nip: checkerNip,
+        jabatan: checkerJabatan
+      },
+      {
+        positionLabel: "Posisi 2 (Kanan - Mengetahui / Pengesahan)",
+        title: "MENGETAHUI / PENGESAHAN",
+        role: "Approval 1",
+        name: app1Name,
+        nip: app1Nip,
+        jabatan: app1Jabatan
+      }
+    ];
+  }
   static isVerificationAssigned() {
     try {
       const users = AuthService.getUsers() || [];
@@ -56,7 +160,7 @@ export class DataService {
       this.pruneOldNotifications();
       try {
         localStorage.removeItem("epresensi_report_signatories");
-      } catch (e) {}
+      } catch (e) { }
 
       // Try saving again
       try {
@@ -143,8 +247,8 @@ export class DataService {
         const typeLabel = (sub.type || "pengajuan").toUpperCase();
         const isApproved = statusUpper === "APPROVED";
         const statusLabel = isApproved ? "Approved 3 (Selesai)" : "Dalam Proses Approval / Aktif";
-        const periodeText = subStartClean === subEndClean 
-          ? formatDateIndonesian(subStartClean) 
+        const periodeText = subStartClean === subEndClean
+          ? formatDateIndonesian(subStartClean)
           : `${formatDateIndonesian(subStartClean)} s/d ${formatDateIndonesian(subEndClean)}`;
 
         return {

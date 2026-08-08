@@ -34,32 +34,7 @@ import { DocumentViewerModal } from "../components/common/DocumentViewerModal";
 import { LoadingSkeleton } from "../components/common/LoadingSkeleton";
 import { motion, AnimatePresence } from "motion/react";
 
-const DEFAULT_SIGNATORIES = [
-  {
-    positionLabel: "Posisi 1 (Kiri - Verifikator)",
-    title: "",
-    role: "",
-    name: "",
-    nip: "",
-    jabatan: ""
-  },
-  {
-    positionLabel: "Posisi 2 (Tengah - Approval 2)",
-    title: "",
-    role: "",
-    name: "",
-    nip: "",
-    jabatan: ""
-  },
-  {
-    positionLabel: "Posisi 3 (Kanan - Approval 3)",
-    title: "",
-    role: "",
-    name: "",
-    nip: "",
-    jabatan: ""
-  }
-];
+const DEFAULT_SIGNATORIES = DataService.getDefaultReportSignatories("UPT Semarang");
 
 export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   const [selectedMonth, setSelectedMonth] = useState("all");
@@ -180,8 +155,15 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
       const saved = localStorage.getItem("epresensi_report_signatories");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length === 3) {
-          setSignatories(parsed);
+        if (Array.isArray(parsed)) {
+          if (parsed.length === 3 && (parsed[0].role?.includes("Verifikasi") || parsed[0].title === "DIVERIFIKASI OLEH")) {
+            setSignatories([
+              { ...parsed[1], title: "DIVERIFIKASI OLEH", role: "Checker" },
+              parsed[2]
+            ]);
+          } else {
+            setSignatories(parsed);
+          }
         }
       }
     } catch {
@@ -497,9 +479,11 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   };
 
   const handleResetSignatories = () => {
-    setSignatories(DEFAULT_SIGNATORIES);
+    const unitTarget = selectedUnit !== "all" ? selectedUnit : userUnitScope || "UPT Semarang";
+    const freshDefaults = DataService.getDefaultReportSignatories(unitTarget);
+    setSignatories(freshDefaults);
     localStorage.removeItem("epresensi_report_signatories");
-    setSuccessNotification("Pejabat Penandatangan di-reset ke data default.");
+    setSuccessNotification("Pejabat Penandatangan di-reset ke data default (Checker & Approval 1).");
     setTimeout(() => setSuccessNotification(null), 3000);
   };
 
@@ -862,7 +846,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
                           className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] rounded-xl shadow-2xs cursor-pointer transition inline-flex items-center gap-1.5"
                         >
                           <Eye className="w-3.5 h-3.5 text-sky-400" />
-                          <span>Pratinjau / Print</span>
+                          <span>Pratinjau</span>
                         </button>
                       </td>
                     </tr>
@@ -916,12 +900,12 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
               <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 flex items-start gap-2.5">
                 <UserCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <p>
-                  <strong>Panduan Tandatangan:</strong> Laporan akan mencetak 3 blok penandatangan secara horisontal (Posisi Kiri, Tengah, dan Kanan). Anda dapat memilih pejabat dari sistem atau mengetikkan nama, NIP, dan jabatan secara manual.
+                  <strong>Panduan Tandatangan:</strong> Laporan akan mencetak 2 blok penandatangan secara horisontal (Posisi Kiri DIVERIFIKASI OLEH dan Posisi Kanan MENGETAHUI / PENGESAHAN). Anda dapat memilih pejabat dari sistem atau mengetikkan nama, NIP, dan jabatan secara manual.
                 </p>
               </div>
 
-              {/* 3 Columns Signatories Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* 2 Columns Signatories Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {signatories.map((sig, idx) => (
                   <div
                     key={idx}

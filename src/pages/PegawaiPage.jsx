@@ -3,6 +3,7 @@ import { BriefcaseBusiness, Edit2, Plus, Search, UserRound, UsersRound, X } from
 import { api } from "../services/api";
 import { toast } from "../utils/toast";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
+import { SortableTableHeader, sortTableRows, toggleTableSort } from "../components/common/SortableTableHeader";
 
 const emptyForm = {
   id_unit: "",
@@ -25,6 +26,8 @@ export const PegawaiPage = () => {
   const [positions, setPositions] = useState([]);
   const [umkList, setUmkList] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [unitFilter, setUnitFilter] = useState("all"); const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("nama"); const [sortOrder, setSortOrder] = useState("asc");
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -61,17 +64,18 @@ export const PegawaiPage = () => {
   const records = activeTab === "pegawai" ? pegawai : petugas;
   const filteredRecords = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return records;
-    return records.filter((item) => [
+    const matches = records.filter((item) => (unitFilter === "all" || String(item.id_unit) === unitFilter) && (statusFilter === "all" || (item.is_active || "Y") === statusFilter) && (!query || [
       item.nip,
       item.nama,
       item.jabatan?.nama_jabatan,
       item.jabatan?.project?.nama_project,
       item.unit?.nama_unit,
       item.umk?.nama_umk
-    ].some((value) => String(value || "").toLowerCase().includes(query)));
-  }, [records, searchQuery]);
-  const pagination = useDataPagination(filteredRecords, [searchQuery, activeTab]);
+    ].some((value) => String(value || "").toLowerCase().includes(query))));
+    return sortTableRows(matches, sortBy, sortOrder, { id: (i) => Number(i.id_pegawai || i.id_petugas), jabatan: (i) => i.jabatan?.nama_jabatan || "", project: (i) => i.jabatan?.project?.nama_project || "", unit: (i) => i.unit?.nama_unit || "" });
+  }, [records, searchQuery, unitFilter, statusFilter, sortBy, sortOrder]);
+  const pagination = useDataPagination(filteredRecords, [searchQuery, activeTab, unitFilter, statusFilter, sortBy, sortOrder]);
+  const handleSort = (field) => toggleTableSort(field, sortBy, sortOrder, setSortBy, setSortOrder);
 
   const updateForm = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -165,17 +169,17 @@ export const PegawaiPage = () => {
         </button>
       </div>
 
-      <div className="relative max-w-lg">
+      <div className="flex flex-col sm:flex-row flex-wrap gap-2"><div className="relative flex-1 min-w-64 max-w-lg">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={`Cari data ${activeTab}...`} className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-100" />
-      </div>
+      </div><select value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Unit</option>{units.map((unit) => <option key={unit.id_unit} value={unit.id_unit}>{unit.nama_unit}</option>)}</select><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select></div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full min-w-[1100px] text-xs">
           <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider">
             <tr>
-              <th className="px-4 py-3 text-left">ID</th><th className="px-4 py-3 text-left">NIP</th><th className="px-4 py-3 text-left">Nama</th>
-              <th className="px-4 py-3 text-left">Jabatan</th><th className="px-4 py-3 text-left">Project</th><th className="px-4 py-3 text-left">Unit</th>
+              <SortableTableHeader field="id" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">ID</SortableTableHeader><SortableTableHeader field="nip" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">NIP</SortableTableHeader><SortableTableHeader field="nama" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Nama</SortableTableHeader>
+              <SortableTableHeader field="jabatan" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Jabatan</SortableTableHeader><SortableTableHeader field="project" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Project</SortableTableHeader><SortableTableHeader field="unit" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Unit</SortableTableHeader>
               {activeTab === "petugas" && <th className="px-4 py-3 text-left">UMK</th>}
               <th className="px-4 py-3 text-left">Tanggal Masuk</th><th className="px-4 py-3 text-left">Tanggal Lahir</th><th className="px-4 py-3 text-center">Status</th><th className="px-4 py-3 text-center">Aksi</th>
             </tr>

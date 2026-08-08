@@ -4,6 +4,7 @@ import { MasterDataService } from "../services/masterDataService";
 import { api } from "../services/api";
 import { toast } from "../utils/toast";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
+import { SortableTableHeader, sortTableRows, toggleTableSort } from "../components/common/SortableTableHeader";
 
 const getUnitKind = (name = "") => {
   const value = name.toUpperCase();
@@ -25,6 +26,9 @@ const kindStyle = {
 export const UnitKerjaPage = () => {
   const [units, setUnits] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("nama_unit"); const [sortOrder, setSortOrder] = useState("asc");
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState(null);
@@ -95,9 +99,11 @@ export const UnitKerjaPage = () => {
       });
     };
     flatten(unitTree);
-    return rows;
-  }, [unitTree, expandedIds, searchQuery]);
-  const pagination = useDataPagination(visibleRows, [searchQuery]);
+    const matches = rows.filter((unit) => (kindFilter === "all" || getUnitKind(unit.nama_unit) === kindFilter) && (statusFilter === "all" || (unit.is_active || "Y") === statusFilter));
+    return sortTableRows(matches, sortBy, sortOrder, { id_unit: (u) => Number(u.id_unit), induk: (u) => u.indukUnit?.nama_unit || "", kind: (u) => getUnitKind(u.nama_unit) });
+  }, [unitTree, expandedIds, searchQuery, kindFilter, statusFilter, sortBy, sortOrder]);
+  const pagination = useDataPagination(visibleRows, [searchQuery, kindFilter, statusFilter, sortBy, sortOrder]);
+  const handleSort = (field) => toggleTableSort(field, sortBy, sortOrder, setSortBy, setSortOrder);
 
   const toggleExpanded = (id) => {
     setExpandedIds((current) => {
@@ -199,7 +205,7 @@ export const UnitKerjaPage = () => {
         </div>
       </div>
 
-      <div className="relative max-w-lg">
+      <div className="flex flex-col sm:flex-row gap-2"><div className="relative flex-1 max-w-lg">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           value={searchQuery}
@@ -207,17 +213,17 @@ export const UnitKerjaPage = () => {
           placeholder="Cari ID, nama unit, atau unit induk..."
           className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-100"
         />
-      </div>
+      </div><select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Jenis</option><option value="UP">UP</option><option value="UPT">UPT</option><option value="ULTG">ULTG</option><option value="GI">GI</option></select><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select></div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full min-w-[720px] text-xs">
           <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider">
             <tr>
-              <th className="px-4 py-3 text-left w-24">ID</th>
-              <th className="px-4 py-3 text-left">Hierarki Unit</th>
-              <th className="px-4 py-3 text-left">Unit Induk</th>
-              <th className="px-4 py-3 text-center w-28">Jenis</th>
-              <th className="px-4 py-3 text-center w-28">Status</th>
+              <SortableTableHeader field="id_unit" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3 w-24">ID</SortableTableHeader>
+              <SortableTableHeader field="nama_unit" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Hierarki Unit</SortableTableHeader>
+              <SortableTableHeader field="induk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Unit Induk</SortableTableHeader>
+              <SortableTableHeader field="kind" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3 w-28">Jenis</SortableTableHeader>
+              <SortableTableHeader field="is_active" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3 w-28">Status</SortableTableHeader>
               <th className="px-4 py-3 text-center w-24">Aksi</th>
             </tr>
           </thead>

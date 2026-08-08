@@ -13,7 +13,6 @@ import { IjinPage } from "./pages/IjinPage";
 import { SakitPage } from "./pages/SakitPage";
 import { SppdPage } from "./pages/SppdPage";
 import { PegawaiPage } from "./pages/PegawaiPage";
-import { PengaturanPage } from "./pages/PengaturanPage";
 import { UnitKerjaPage } from "./pages/UnitKerjaPage";
 import { ProjectPage } from "./pages/ProjectPage";
 import { JabatanPage } from "./pages/JabatanPage";
@@ -23,6 +22,7 @@ import { HariLiburPage } from "./pages/HariLiburPage";
 import { MutasiPegawaiPage } from "./pages/MutasiPegawaiPage";
 import { UsersPage } from "./pages/UsersPage";
 import { RolesPage } from "./pages/RolesPage";
+import UnitRolePage from "./pages/UnitRolePage";
 import { ResponsibilitiesPage } from "./pages/ResponsibilitiesPage";
 import MainLayout from "./components/layout/MainLayout";
 import { WorkflowPage } from "./pages/WorkflowPage";
@@ -898,15 +898,17 @@ function AppContent() {
             </RouteAccessGuard>
           }
         />
-
         <Route
-          path="pengaturan"
+          path="unit-role"
           element={
-            <RouteAccessGuard moduleId="pengaturan" currentUser={currentUser}>
-              <PengaturanPage currentUser={currentUser} settings={settings} onRefreshData={refreshData} />
+            <RouteAccessGuard moduleId="users" currentUser={currentUser}>
+              <UnitRolePage currentUser={currentUser} />
             </RouteAccessGuard>
           }
         />
+
+        {/* Pengaturan dinonaktifkan sementara; komponennya tetap disimpan. */}
+        <Route path="pengaturan" element={<Navigate to="/dashboard" replace />} />
         
         {/* Redirect old access-matrix route directly to unified Responsibilities Page */}
         <Route path="pengaturan/access-matrix" element={<Navigate to="/responsibilities" replace />} />

@@ -3,6 +3,7 @@ import { Calculator, Edit2, Plus, Search, X } from "lucide-react";
 import { api } from "../services/api";
 import { toast } from "../utils/toast";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
+import { SortableTableHeader, sortTableRows, toggleTableSort } from "../components/common/SortableTableHeader";
 
 const emptyForm = { masa_kerja: "", koef: "", tmk: "", keterangan: "", is_active: "Y" };
 const percent = (value) => `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 4 }).format(Number(value || 0) * 100)}%`;
@@ -10,6 +11,7 @@ const percent = (value) => `${new Intl.NumberFormat("id-ID", { maximumFractionDi
 export const FaktorUpahPage = () => {
   const [records, setRecords] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all"); const [sortBy, setSortBy] = useState("masa_kerja"); const [sortOrder, setSortOrder] = useState("asc");
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -31,12 +33,13 @@ export const FaktorUpahPage = () => {
 
   const allFilteredRecords = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return records;
-    return records.filter((item) => [item.id_koef_tmk, item.masa_kerja, item.koef, item.tmk, item.keterangan]
-      .some((value) => String(value ?? "").toLowerCase().includes(query)));
-  }, [records, searchQuery]);
-  const pagination = useDataPagination(allFilteredRecords, [searchQuery]);
+    const matches = records.filter((item) => (statusFilter === "all" || (item.is_active || "Y") === statusFilter) && (!query || [item.id_koef_tmk, item.masa_kerja, item.koef, item.tmk, item.keterangan]
+      .some((value) => String(value ?? "").toLowerCase().includes(query))));
+    return sortTableRows(matches, sortBy, sortOrder, { id_koef_tmk: (i) => Number(i.id_koef_tmk), masa_kerja: (i) => Number(i.masa_kerja), koef: (i) => Number(i.koef), tmk: (i) => Number(i.tmk) });
+  }, [records, searchQuery, statusFilter, sortBy, sortOrder]);
+  const pagination = useDataPagination(allFilteredRecords, [searchQuery, statusFilter, sortBy, sortOrder]);
   const filteredRecords = pagination.paginatedItems;
+  const handleSort = (field) => toggleTableSort(field, sortBy, sortOrder, setSortBy, setSortOrder);
 
   const updateForm = (field, value) => setForm((current) => ({ ...current, [field]: value }));
   const openCreateForm = () => { setEditingRecord(null); setForm(emptyForm); setFormError(""); setIsFormOpen(true); };
@@ -68,8 +71,8 @@ export const FaktorUpahPage = () => {
 
   return <div className="p-3 sm:p-6 space-y-5">
     <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3"><div><h1 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2"><Calculator className="w-6 h-6 text-indigo-600" /> Faktor Upah — KOEF &amp; TMK</h1><p className="text-xs text-slate-600 mt-1">Master koefisien dan tunjangan masa kerja dari backend.</p></div><button onClick={openCreateForm} className="h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> Tambah KOEF &amp; TMK</button></div>
-    <div className="relative max-w-lg"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Cari masa kerja, keterangan, KOEF, atau TMK..." className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-100" /></div>
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm"><table className="w-full min-w-[820px] text-xs"><thead className="bg-slate-50 text-slate-600 uppercase tracking-wider"><tr><th className="px-4 py-3 text-left">ID</th><th className="px-4 py-3 text-left">Masa Kerja Mulai</th><th className="px-4 py-3 text-left">Keterangan</th><th className="px-4 py-3 text-right">KOEF</th><th className="px-4 py-3 text-right">TMK</th><th className="px-4 py-3 text-center">Status</th><th className="px-4 py-3 text-center">Aksi</th></tr></thead><tbody className="divide-y divide-slate-100">
+    <div className="flex flex-col sm:flex-row gap-2"><div className="relative flex-1 max-w-lg"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Cari masa kerja, keterangan, KOEF, atau TMK..." className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-100" /></div><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select></div>
+    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm"><table className="w-full min-w-[820px] text-xs"><thead className="bg-slate-50 text-slate-600 uppercase tracking-wider"><tr><SortableTableHeader field="id_koef_tmk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">ID</SortableTableHeader><SortableTableHeader field="masa_kerja" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Masa Kerja Mulai</SortableTableHeader><SortableTableHeader field="keterangan" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Keterangan</SortableTableHeader><SortableTableHeader field="koef" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="right" className="px-4 py-3">KOEF</SortableTableHeader><SortableTableHeader field="tmk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="right" className="px-4 py-3">TMK</SortableTableHeader><SortableTableHeader field="is_active" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3">Status</SortableTableHeader><th className="px-4 py-3 text-center">Aksi</th></tr></thead><tbody className="divide-y divide-slate-100">
       {filteredRecords.map((item) => <tr key={item.id_koef_tmk} className="hover:bg-slate-50"><td className="px-4 py-3 font-black">#{item.id_koef_tmk}</td><td className="px-4 py-3 font-bold">{item.masa_kerja} tahun</td><td className="px-4 py-3 font-semibold text-slate-800">{item.keterangan}</td><td className="px-4 py-3 text-right"><div className="font-mono font-black text-indigo-700">{item.koef}</div><div className="text-[10px] text-slate-400">{percent(item.koef)}</div></td><td className="px-4 py-3 text-right"><div className="font-mono font-black text-emerald-700">{item.tmk}</div><div className="text-[10px] text-slate-400">{percent(item.tmk)}</div></td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-full font-bold ${item.is_active === "N" ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{item.is_active === "N" ? "Nonaktif" : "Aktif"}</span></td><td className="px-4 py-3 text-center"><button onClick={() => openEditForm(item)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100"><Edit2 className="w-4 h-4" /></button></td></tr>)}
       {isLoading && <tr><td colSpan="7" className="px-4 py-12 text-center text-slate-500">Memuat data...</td></tr>}{!isLoading && filteredRecords.length === 0 && <tr><td colSpan="7" className="px-4 py-12 text-center text-slate-500">Data KOEF &amp; TMK tidak ditemukan.</td></tr>}
     </tbody></table></div>

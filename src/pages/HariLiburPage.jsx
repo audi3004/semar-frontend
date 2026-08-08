@@ -4,11 +4,13 @@ import { formatDateIndonesian } from "../utils/formatters";
 import { Calendar, Plus, Search, Edit2, Trash2, AlertCircle, Filter } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
+import { SortableTableHeader, sortTableRows, toggleTableSort } from "../components/common/SortableTableHeader";
 
 export const HariLiburPage = ({ currentUser, onRefreshData }) => {
   const [holidays, setHolidays] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedYear, setSelectedYear] = useState("all");
+  const [sortBy, setSortBy] = useState("tgl_libur"); const [sortOrder, setSortOrder] = useState("desc");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [formError, setFormError] = useState("");
@@ -36,7 +38,7 @@ export const HariLiburPage = ({ currentUser, onRefreshData }) => {
     loadData();
   }, []);
 
-  const filteredHolidays = holidays.filter((item) => {
+  const filteredHolidays = sortTableRows(holidays.filter((item) => {
     if (selectedYear !== "all" && String(item.tahun_libur) !== String(selectedYear)) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -46,8 +48,9 @@ export const HariLiburPage = ({ currentUser, onRefreshData }) => {
       String(item.tahun_libur).includes(q) ||
       String(item.id_hpl).includes(q)
     );
-  });
-  const pagination = useDataPagination(filteredHolidays, [searchQuery, selectedYear]);
+  }), sortBy, sortOrder, { id_hpl: (h) => Number(h.id_hpl), tahun_libur: (h) => Number(h.tahun_libur) });
+  const pagination = useDataPagination(filteredHolidays, [searchQuery, selectedYear, sortBy, sortOrder]);
+  const handleSort = (field) => toggleTableSort(field, sortBy, sortOrder, setSortBy, setSortOrder);
 
   const handleOpenAdd = () => {
     setEditingItem(null);
@@ -183,10 +186,10 @@ export const HariLiburPage = ({ currentUser, onRefreshData }) => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black uppercase text-slate-500 tracking-wider">
-                <th className="p-3.5 pl-5">ID</th>
-                <th className="p-3.5">Tanggal Libur</th>
-                <th className="p-3.5">Keterangan</th>
-                <th className="p-3.5">Tahun</th>
+                <SortableTableHeader field="id_hpl" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5 pl-5">ID</SortableTableHeader>
+                <SortableTableHeader field="tgl_libur" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5">Tanggal Libur</SortableTableHeader>
+                <SortableTableHeader field="ket_libur" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5">Keterangan</SortableTableHeader>
+                <SortableTableHeader field="tahun_libur" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5">Tahun</SortableTableHeader>
                 <th className="p-3.5 pr-5 text-center">Aksi</th>
               </tr>
             </thead>

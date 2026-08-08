@@ -1,6 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DataService } from "../services/dataService";
 import { MasterDataService } from "../services/masterDataService";
+import { api } from "../services/api";
+import {
+  mapWorkflowLembur,
+  mapWorkflowCuti,
+  mapWorkflowIjin,
+  mapWorkflowSakit,
+  mapWorkflowSppd
+} from "../utils/workflowSubmissionMapper";
 import { AttendanceChart } from "../components/charts/AttendanceChart";
 import { DistributionPieChart } from "../components/charts/DistributionPieChart";
 import { ParetoOvertimeChart } from "../components/charts/ParetoOvertimeChart";
@@ -61,89 +69,64 @@ export const DashboardPage = ({
   const [paretoGroupBy, setParetoGroupBy] = useState("pekerjaan");
   const [selectedStatusCard, setSelectedStatusCard] = useState("all");
   const [expandedCardKey, setExpandedCardKey] = useState(null);
+  const [dashboardSubmissions, setDashboardSubmissions] = useState(submissions || []);
+
+  useEffect(() => {
+    if (!currentUser) return undefined;
+
+    let isCurrentRequest = true;
+    const loadDashboard = async () => {
+      try {
+        const params = {};
+        if (startDate) params.start_date = startDate;
+        if (endDate) params.end_date = endDate;
+
+        const result = await api.getDashboardTransactions(params);
+        if (!isCurrentRequest) return;
+
+        setDashboardSubmissions([
+          ...(result.lembur || []).map(mapWorkflowLembur),
+          ...(result.cuti || []).map(mapWorkflowCuti),
+          ...(result.ijin || []).map(mapWorkflowIjin),
+          ...(result.sakit || []).map(mapWorkflowSakit),
+          ...(result.sppd || []).map(mapWorkflowSppd)
+        ]);
+      } catch (error) {
+        if (isCurrentRequest) {
+          console.error("Gagal memuat data dashboard:", error);
+          setDashboardSubmissions([]);
+        }
+      }
+    };
+
+    loadDashboard();
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [currentUser?.id_user, currentUser?.id, startDate, endDate]);
 
   if (!currentUser) return <LoadingSkeleton variant="dashboard" />;
 
   const isMaker = currentUser?.role === "maker";
-  const isApprover = currentUser?.role !== "maker" && currentUser?.role !== "admin";
 
-  // Role, Unit & Date filtered submissions list for Dashboard
-  const safeSubmissions = (submissions || []).filter((sub) => {
-    // 1. Task 1: Maker role only sees their own submissions
-    if (isMaker) {
-      const isMySubmission =
-        (sub.employeeNip && sub.employeeNip === currentUser?.nip) ||
-        (sub.employeeName && sub.employeeName === currentUser?.name) ||
-        (sub.createdBy && sub.createdBy === currentUser?.id);
-      if (!isMySubmission) return false;
+  // Data identitas/role/unit telah dibatasi oleh backend. Filter di sini hanya filter tampilan.
+  const safeSubmissions = dashboardSubmissions.filter((sub) => {
+    const unitNames = (sub.unitHierarchy || [])
+      .map((unit) => String(unit?.name || "").trim().toLowerCase())
+      .filter(Boolean);
+    const matchesUnit = (selected, fallback) => {
+      if (!selected || selected.startsWith("Semua ")) return true;
+      const selectedName = String(selected).trim().toLowerCase();
+      const fallbackName = String(fallback || "").trim().toLowerCase();
+      return unitNames.includes(selectedName) || fallbackName === selectedName;
+    };
 
-      if (currentUser?.unitUpt && sub.unitUpt && sub.unitUpt !== currentUser.unitUpt) {
-        return false;
-      }
-      if (currentUser?.unitUltg && sub.unitUltg && sub.unitUltg !== currentUser.unitUltg) {
-        return false;
-      }
-      if (
-        currentUser?.garduInduk &&
-        currentUser?.garduInduk !== "Semua GI" &&
-        sub.garduInduk &&
-        sub.garduInduk !== currentUser.garduInduk
-      ) {
-        return false;
-      }
-    }
+    // Dropdown Unit Filters (selectedUpt, selectedUltg, selectedGi)
+    if (!matchesUnit(selectedUpt, sub.unitUpt || sub.upt)) return false;
+    if (!matchesUnit(selectedUltg, sub.unitUltg || sub.ultg)) return false;
+    if (!matchesUnit(selectedGi, sub.garduInduk || sub.gi)) return false;
 
-    // 2. Approver roles filtered strictly by their level (Approved 2 level UPT, Approved 3 seluruh unit)
-    if (isApprover) {
-      if (currentUser?.role === "approved3") {
-        // Approved 3: Akses seluruh unit (no default unit restriction)
-      } else if (
-        currentUser?.role === "approved2" ||
-        currentUser?.role === "approved1" ||
-        currentUser?.role === "verification"
-      ) {
-        // Approved 2 (TL ES), Approved 1 (MAN PLN), Verification (AMN PLN): Sampai level UPT
-        if (currentUser?.role === "approved2" && currentUser?.multiUpt && Array.isArray(currentUser.multiUpt)) {
-          if (sub.unitUpt && !currentUser.multiUpt.includes(sub.unitUpt)) {
-            return false;
-          }
-        } else if (currentUser?.unitUpt && sub.unitUpt && sub.unitUpt !== currentUser.unitUpt) {
-          return false;
-        }
-      } else if (currentUser?.role === "checker") {
-        // Checker (TL PLN): Level UPT & ULTG (& GI if set)
-        if (currentUser?.unitUpt && sub.unitUpt && sub.unitUpt !== currentUser.unitUpt) {
-          return false;
-        }
-        if (currentUser?.unitUltg && sub.unitUltg && sub.unitUltg !== currentUser.unitUltg) {
-          return false;
-        }
-        if (
-          currentUser?.garduInduk &&
-          currentUser?.garduInduk !== "Semua GI" &&
-          sub.garduInduk &&
-          sub.garduInduk !== currentUser.garduInduk
-        ) {
-          return false;
-        }
-      }
-    }
-
-    // 3. Dropdown Unit Filters (selectedUpt, selectedUltg, selectedGi)
-    if (selectedUpt && selectedUpt !== "Semua UPT") {
-      const uUpt = sub.unitUpt || sub.upt || "";
-      if (uUpt && uUpt !== selectedUpt) return false;
-    }
-    if (selectedUltg && selectedUltg !== "Semua ULTG") {
-      const uUltg = sub.unitUltg || sub.ultg || "";
-      if (uUltg && uUltg !== selectedUltg) return false;
-    }
-    if (selectedGi && selectedGi !== "Semua GI") {
-      const uGi = sub.garduInduk || sub.gi || "";
-      if (uGi && uGi !== selectedGi) return false;
-    }
-
-    // 4. Date Range Filters (startDate, endDate)
+    // Date Range Filters (juga diterapkan backend untuk efisiensi query)
     const subDateStr = sub.tanggalLembur || sub.tanggalMulai || sub.tanggalBerangkat || sub.tanggalPengajuan || sub.createdAt || "";
     if (subDateStr) {
       const dateOnly = subDateStr.substring(0, 10);
@@ -1643,7 +1626,7 @@ export const DashboardPage = ({
                   </tr>
                 ) : (
                   displayTableSubmissions.map((sub) => (
-                    <tr key={sub.id} className="hover:bg-slate-50/80 transition duration-150">
+                    <tr key={`${sub.type}-${sub.id}`} className="hover:bg-slate-50/80 transition duration-150">
                       <td className="py-3.5 px-4 font-black text-slate-950 text-xs sm:text-sm">{sub.employeeName}</td>
                       <td className="py-3.5 px-4 font-mono text-slate-500 font-bold tracking-tight">{sub.employeeNip}</td>
                       <td className="py-3.5 px-4 text-slate-650 font-bold">{sub.garduInduk || sub.unitUltg}</td>
@@ -1738,7 +1721,7 @@ export const DashboardPage = ({
               </div>
             ) : (
               displayTableSubmissions.map((sub) => (
-                <div key={sub.id} className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2.5">
+                <div key={`${sub.type}-${sub.id}`} className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="font-black text-slate-900 text-xs">{sub.employeeName}</h4>

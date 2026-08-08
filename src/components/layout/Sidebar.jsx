@@ -12,7 +12,6 @@ import {
   FileText,
   FolderArchive,
   Users,
-  Settings,
   Building2,
   FolderKanban,
   Award,
@@ -25,7 +24,8 @@ import {
   Sliders,
   LogOut,
   X,
-  PanelLeft
+  PanelLeft,
+  Network
 } from "lucide-react";
 import { ResponsibilityService } from "../../services/responsibilityService";
 
@@ -87,13 +87,14 @@ export const Sidebar = ({
     { id: "mutasi-pegawai", label: "Mutasi Pegawai", icon: ArrowRightLeft },
     { id: "users", label: "Daftar User", icon: UserPlus },
     { id: "roles", label: "Roles", icon: ShieldCheck },
+    { id: "unit-role", label: "Unit Role", icon: Network },
     { id: "hari-libur", label: "Hari Libur", icon: Calendar },
-    { id: "responsibilities", label: "Responsibility & Role User", icon: Sliders },
-    { id: "pengaturan", label: "Pengaturan", icon: Settings }
+    { id: "responsibilities", label: "Responsibility & Role User", icon: Sliders }
   ];
 
   const administratorItems = allAdministratorItems.filter((item) => {
-    return ResponsibilityService.hasAccess(userRole, item.id, currentUser?.nip);
+    const permissionId = item.id === "unit-role" ? "users" : item.id;
+    return ResponsibilityService.hasAccess(userRole, permissionId, currentUser?.nip);
   });
 
   const handleTabClick = (id) => {

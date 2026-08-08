@@ -712,17 +712,18 @@ export class MasterDataService {
         });
       });
     }
-    if (params.activeOnly) {
-      rawList = rawList.filter((item) => item.active === "Y");
+    const requestedActive = params.is_active || (params.activeFilter !== "ALL" ? params.activeFilter : undefined);
+    if (requestedActive) {
+      rawList = rawList.filter((item) => (item.is_active || item.active) === requestedActive);
     }
     if (params.unitFilter) {
       rawList = rawList.filter((item) => {
         return item.id_unit_gi === params.unitFilter || item.id_unit_ultg === params.unitFilter || item.id_unit_upt === params.unitFilter;
       });
     }
-    if (params.sortBy) {
-      const field = params.sortBy;
-      const order = params.sortOrder || "asc";
+    if (params.sort_by || params.sortBy) {
+      const field = params.sort_by || params.sortBy;
+      const order = params.sort_order || params.sortOrder || "asc";
       rawList.sort((a, b) => {
         const valA = a[field];
         const valB = b[field];
@@ -937,7 +938,18 @@ export class MasterDataService {
     if (endpoint) {
       try {
         const apiPath = endpoint.replace(/^\/api/, "");
-        const res = await api.client.get(apiPath, { params });
+        const requestParams = {
+          ...params,
+          sort_by: params.sort_by || params.sortBy,
+          sort_order: params.sort_order || params.sortOrder,
+          is_active: params.is_active || undefined
+        };
+        delete requestParams.sortBy;
+        delete requestParams.sortOrder;
+        delete requestParams.activeOnly;
+        delete requestParams.activeFilter;
+        Object.keys(requestParams).forEach((key) => requestParams[key] === undefined && delete requestParams[key]);
+        const res = await api.client.get(apiPath, { params: requestParams });
         if (res.data && res.data.success) {
           return {
             data: this.normalizeApiRecords(table, res.data.data || []),

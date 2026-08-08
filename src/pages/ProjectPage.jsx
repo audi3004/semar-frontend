@@ -3,10 +3,13 @@ import { MasterDataService } from "../services/masterDataService";
 import { FolderKanban, Plus, Search, Edit2, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
+import { SortableTableHeader, sortTableRows, toggleTableSort } from "../components/common/SortableTableHeader";
 
 export const ProjectPage = ({ currentUser, onRefreshData }) => {
   const [projects, setProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("nama_project"); const [sortOrder, setSortOrder] = useState("asc");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [formError, setFormError] = useState("");
@@ -23,11 +26,13 @@ export const ProjectPage = ({ currentUser, onRefreshData }) => {
     loadData();
   }, []);
 
-  const filteredProjects = projects.filter((p) => {
+  const filteredProjects = sortTableRows(projects.filter((p) => {
+    if (statusFilter !== "all" && (p.is_active || p.active || "Y") !== statusFilter) return false;
     if (!searchQuery) return true;
     return p.nama_project?.toLowerCase().includes(searchQuery.toLowerCase());
-  });
-  const pagination = useDataPagination(filteredProjects, [searchQuery]);
+  }), sortBy, sortOrder, { id_project: (p) => Number(p.id_project), is_active: (p) => p.is_active || p.active || "Y" });
+  const pagination = useDataPagination(filteredProjects, [searchQuery, statusFilter, sortBy, sortOrder]);
+  const handleSort = (field) => toggleTableSort(field, sortBy, sortOrder, setSortBy, setSortOrder);
 
   const handleOpenAdd = () => {
     setEditingItem(null);
@@ -124,7 +129,7 @@ export const ProjectPage = ({ currentUser, onRefreshData }) => {
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
-        <span className="text-xs text-slate-500 font-bold">Total Project: {filteredProjects.length} Proyek</span>
+        <div className="flex items-center gap-2"><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select><span className="text-xs text-slate-500 font-bold">Total Project: {filteredProjects.length} Proyek</span></div>
       </div>
 
       {/* Table */}
@@ -133,9 +138,9 @@ export const ProjectPage = ({ currentUser, onRefreshData }) => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black uppercase text-slate-500 tracking-wider">
-                <th className="p-3.5 pl-5">ID Project</th>
-                <th className="p-3.5">Nama Project / Program</th>
-                <th className="p-3.5">Status Aktif</th>
+                <SortableTableHeader field="id_project" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5 pl-5">ID Project</SortableTableHeader>
+                <SortableTableHeader field="nama_project" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5">Nama Project / Program</SortableTableHeader>
+                <SortableTableHeader field="is_active" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5">Status Aktif</SortableTableHeader>
                 <th className="p-3.5 pr-5 text-center">Aksi</th>
               </tr>
             </thead>

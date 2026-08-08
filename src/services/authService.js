@@ -96,7 +96,8 @@ export class AuthService {
   static failedAttempts = {};
 
   static normalizeUser(user) {
-    const roleCode = user?.role?.kode_role || user?.kode_role || "";
+    const roleObject = typeof user?.role === "object" ? user.role : user?.roleDetail;
+    const roleCode = roleObject?.kode_role || user?.kode_role || user?.kodeRole || "";
     const person = user?.pegawai || user?.petugas || {};
     const fullName = person?.nama || user?.full_name || user?.nama || user?.name || user?.username;
     const jabatanName = person?.jabatan?.nama_jabatan || user?.jabatan || "-";
@@ -115,8 +116,8 @@ export class AuthService {
       jabatan: jabatanName,
       unit: unitName,
       unitUpt: unitName,
-      roleName: user?.role?.nama_role || roleCode || "-",
-      roleDetail: typeof user.role === "object" ? user.role : null,
+      roleName: roleObject?.nama_role || user?.roleName || roleCode || "-",
+      roleDetail: roleObject || null,
       role: frontendRole || (typeof user.role === "string" ? user.role : "maker")
     };
   }

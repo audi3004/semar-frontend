@@ -3,6 +3,7 @@ import { Coins, Edit2, Plus, Search, X } from "lucide-react";
 import { api } from "../services/api";
 import { toast } from "../utils/toast";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
+import { SortableTableHeader, sortTableRows, toggleTableSort } from "../components/common/SortableTableHeader";
 
 const initialForm = {
   jenis_wilayah: "KABUPATEN",
@@ -18,6 +19,8 @@ export const UmkPage = () => {
   const [records, setRecords] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [yearFilter, setYearFilter] = useState("all");
+  const [regionFilter, setRegionFilter] = useState("all"); const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("tahun_umk"); const [sortOrder, setSortOrder] = useState("desc");
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -48,15 +51,19 @@ export const UmkPage = () => {
 
   const allFilteredRecords = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return records.filter((item) => {
+    const matches = records.filter((item) => {
       if (yearFilter !== "all" && String(item.tahun_umk) !== yearFilter) return false;
+      if (regionFilter !== "all" && item.jenis_wilayah !== regionFilter) return false;
+      if (statusFilter !== "all" && (item.is_active || "Y") !== statusFilter) return false;
       if (!query) return true;
       return [item.id_umk, item.jenis_wilayah, item.nama_wilayah, item.tahun_umk, item.nominal_umk]
         .some((value) => String(value ?? "").toLowerCase().includes(query));
     });
-  }, [records, searchQuery, yearFilter]);
-  const pagination = useDataPagination(allFilteredRecords, [searchQuery, yearFilter]);
+    return sortTableRows(matches, sortBy, sortOrder, { id_umk: (i) => Number(i.id_umk), tahun_umk: (i) => Number(i.tahun_umk), nominal_umk: (i) => Number(i.nominal_umk) });
+  }, [records, searchQuery, yearFilter, regionFilter, statusFilter, sortBy, sortOrder]);
+  const pagination = useDataPagination(allFilteredRecords, [searchQuery, yearFilter, regionFilter, statusFilter, sortBy, sortOrder]);
   const filteredRecords = pagination.paginatedItems;
+  const handleSort = (field) => toggleTableSort(field, sortBy, sortOrder, setSortBy, setSortOrder);
 
   const updateForm = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -125,12 +132,12 @@ export const UmkPage = () => {
 
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1 max-w-lg"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cari wilayah, jenis, tahun, atau nominal..." className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-100" /></div>
-        <select value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} className="h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Tahun</option>{years.map((year) => <option key={year} value={year}>{year}</option>)}</select>
+        <select value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} className="h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Tahun</option>{years.map((year) => <option key={year} value={year}>{year}</option>)}</select><select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Wilayah</option><option value="PROVINSI">Provinsi</option><option value="KOTA">Kota</option><option value="KABUPATEN">Kabupaten</option></select><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select>
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full min-w-[850px] text-xs">
-          <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider"><tr><th className="px-4 py-3 text-left">ID</th><th className="px-4 py-3 text-left">Jenis Wilayah</th><th className="px-4 py-3 text-left">Nama Wilayah</th><th className="px-4 py-3 text-center">Tahun</th><th className="px-4 py-3 text-right">Nominal UMK</th><th className="px-4 py-3 text-center">Status</th><th className="px-4 py-3 text-center">Aksi</th></tr></thead>
+          <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider"><tr><SortableTableHeader field="id_umk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">ID</SortableTableHeader><SortableTableHeader field="jenis_wilayah" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Jenis Wilayah</SortableTableHeader><SortableTableHeader field="nama_wilayah" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Nama Wilayah</SortableTableHeader><SortableTableHeader field="tahun_umk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3">Tahun</SortableTableHeader><SortableTableHeader field="nominal_umk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="right" className="px-4 py-3">Nominal UMK</SortableTableHeader><SortableTableHeader field="is_active" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3">Status</SortableTableHeader><th className="px-4 py-3 text-center">Aksi</th></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {filteredRecords.map((item) => <tr key={item.id_umk} className="hover:bg-slate-50"><td className="px-4 py-3 font-black">#{item.id_umk}</td><td className="px-4 py-3"><span className={`px-2 py-1 rounded-full font-black ${item.jenis_wilayah === "KOTA" ? "bg-sky-100 text-sky-700" : item.jenis_wilayah === "PROVINSI" ? "bg-purple-100 text-purple-700" : "bg-amber-100 text-amber-800"}`}>{item.jenis_wilayah}</span></td><td className="px-4 py-3 font-bold text-slate-900">{item.nama_wilayah}</td><td className="px-4 py-3 text-center font-bold">{item.tahun_umk}</td><td className="px-4 py-3 text-right font-black text-emerald-700">{rupiah.format(Number(item.nominal_umk || 0))}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-full font-bold ${item.is_active === "N" ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{item.is_active === "N" ? "Nonaktif" : "Aktif"}</span></td><td className="px-4 py-3 text-center"><button onClick={() => openEditForm(item)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100"><Edit2 className="w-4 h-4" /></button></td></tr>)}
             {isLoading && <tr><td colSpan="7" className="px-4 py-12 text-center text-slate-500">Memuat data...</td></tr>}
