@@ -44,15 +44,19 @@ import {
    getStatusLabel,
 } from "../utils/formatters";
 import { DistributionPieChart } from "../components/charts/DistributionPieChart";
-const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || "http://localhost:3003").replace(/\/$/, "");
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL;
 const CATEGORY_SEPARATOR = "|||";
-const resolveFileUrl = (value) => value && !String(value).startsWith("http") ? `${API_ORIGIN}${value}` : value || "";
+const resolveFileUrl = (value) =>
+   value && !String(value).startsWith("http")
+      ? `${API_ORIGIN}${value}`
+      : value || "";
 const dataUrlToFile = (dataUrl, filename) => {
    const [header, encoded] = dataUrl.split(",");
    const mime = header.match(/data:([^;]+)/)?.[1] || "image/png";
    const bytes = atob(encoded);
    const buffer = new Uint8Array(bytes.length);
-   for (let index = 0; index < bytes.length; index += 1) buffer[index] = bytes.charCodeAt(index);
+   for (let index = 0; index < bytes.length; index += 1)
+      buffer[index] = bytes.charCodeAt(index);
    return new File([buffer], filename, { type: mime });
 };
 
@@ -64,43 +68,90 @@ const ActionTooltip = ({ text }) => (
 
 const DetailItem = ({ label, value }) => (
    <div className="min-w-0 p-3 rounded-2xl border border-slate-200 bg-white shadow-2xs">
-      <p className="text-[9px] uppercase tracking-wider font-black text-slate-400">{label}</p>
-      <p className="text-[11px] font-bold text-slate-800 mt-1 break-words">{value || "-"}</p>
+      <p className="text-[9px] uppercase tracking-wider font-black text-slate-400">
+         {label}
+      </p>
+      <p className="text-[11px] font-bold text-slate-800 mt-1 break-words">
+         {value || "-"}
+      </p>
    </div>
 );
 
 const FilePreview = ({ label, url, compact = false }) => {
    const isImage = Boolean(url && /\.(jpe?g|png|webp|gif)(?:\?|$)/i.test(url));
    return (
-      <div className={`rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden ${compact ? "min-h-24" : "min-h-36"}`}>
-         {isImage ? <img src={url} alt={label} className={`${compact ? "h-20" : "h-28"} w-full object-cover bg-white`} /> : <div className={`${compact ? "h-20" : "h-28"} flex items-center justify-center bg-white text-slate-300`}><FileCheck className="w-8 h-8" /></div>}
-         <div className="p-2.5 flex items-center justify-between gap-2"><span className="text-[10px] font-bold text-slate-700 truncate">{label}</span>{url ? <a href={url} target="_blank" rel="noreferrer" className="shrink-0 text-[10px] font-black text-indigo-600 hover:text-indigo-800">Lihat</a> : <span className="text-[9px] text-slate-400">Belum ada</span>}</div>
+      <div
+         className={`rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden ${compact ? "min-h-24" : "min-h-36"}`}
+      >
+         {isImage ? (
+            <img
+               src={url}
+               alt={label}
+               className={`${compact ? "h-20" : "h-28"} w-full object-cover bg-white`}
+            />
+         ) : (
+            <div
+               className={`${compact ? "h-20" : "h-28"} flex items-center justify-center bg-white text-slate-300`}
+            >
+               <FileCheck className="w-8 h-8" />
+            </div>
+         )}
+         <div className="p-2.5 flex items-center justify-between gap-2">
+            <span className="text-[10px] font-bold text-slate-700 truncate">
+               {label}
+            </span>
+            {url ? (
+               <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 text-[10px] font-black text-indigo-600 hover:text-indigo-800"
+               >
+                  Lihat
+               </a>
+            ) : (
+               <span className="text-[9px] text-slate-400">Belum ada</span>
+            )}
+         </div>
       </div>
    );
 };
-const getSignatureField = (role = "") => ({
-   maker: "maker_signature", checker: "checker_signature", verification: "verification_signature",
-   approved1: "approval_1_signature", approved2: "approval_2_signature", approved3: "approval_3_signature",
-}[role] || null);
+const getSignatureField = (role = "") =>
+   ({
+      maker: "maker_signature",
+      checker: "checker_signature",
+      verification: "verification_signature",
+      approved1: "approval_1_signature",
+      approved2: "approval_2_signature",
+      approved3: "approval_3_signature",
+   })[role] || null;
 const unpackCategory = (value = "") => {
-   const [kategoriLembur = "", jenisPekerjaan = ""] = String(value).split(CATEGORY_SEPARATOR);
+   const [kategoriLembur = "", jenisPekerjaan = ""] =
+      String(value).split(CATEGORY_SEPARATOR);
    return { kategoriLembur, jenisPekerjaan };
 };
 const mapApiLembur = (item) => {
    const legacyCategory = unpackCategory(item.kategori_lembur);
-   const category = { kategoriLembur: legacyCategory.kategoriLembur, jenisPekerjaan: item.jenis_pekerjaan || legacyCategory.jenisPekerjaan };
+   const category = {
+      kategoriLembur: legacyCategory.kategoriLembur,
+      jenisPekerjaan: item.jenis_pekerjaan || legacyCategory.jenisPekerjaan,
+   };
    const statusCode = item.status?.kode_status || "DRAFT";
    return {
       ...item,
       id: String(item.id_lembur),
       type: "lembur",
-      nomorDokumen: item.nomor_dokumen || `LMB-${String(item.id_lembur).padStart(6, "0")}`,
+      nomorDokumen:
+         item.nomor_dokumen || `LMB-${String(item.id_lembur).padStart(6, "0")}`,
       employeeNip: item.petugas?.nip || "",
       employeeName: item.petugas?.nama || `Petugas #${item.id_petugas}`,
       employeeJabatan: item.petugas?.jabatan?.nama_jabatan || "-",
       unitUpt: item.petugas?.unit?.nama_unit || "-",
       garduInduk: item.petugas?.unit?.nama_unit || "-",
-      tanggalPengajuan: String(item.created_at || item.tgl_lembur || "").slice(0, 10),
+      tanggalPengajuan: String(item.created_at || item.tgl_lembur || "").slice(
+         0,
+         10,
+      ),
       tanggalLembur: item.tgl_lembur,
       jamMulai: String(item.jam_mulai || "").slice(0, 5),
       jamSelesai: String(item.jam_selesai || "").slice(0, 5),
@@ -114,17 +165,23 @@ const mapApiLembur = (item) => {
       fotoDokumentasi1Url: resolveFileUrl(item.foto_kegiatan_1),
       fotoDokumentasi2Url: resolveFileUrl(item.foto_kegiatan_2),
       dasarPerintahLemburUrl: resolveFileUrl(item.surat_perintah_lembur),
-      dasarPerintahLemburName: String(item.surat_perintah_lembur || "").split("/").pop(),
+      dasarPerintahLemburName: String(item.surat_perintah_lembur || "")
+         .split("/")
+         .pop(),
       makerSignatureUrl: resolveFileUrl(item.maker_signature),
       checkerSignatureUrl: resolveFileUrl(item.checker_signature),
       verificationSignatureUrl: resolveFileUrl(item.verification_signature),
       approval1SignatureUrl: resolveFileUrl(item.approval_1_signature),
       approval2SignatureUrl: resolveFileUrl(item.approval_2_signature),
       approval3SignatureUrl: resolveFileUrl(item.approval_3_signature),
-      jumlahJamKoreksi: item.jumlah_jam_koreksi == null ? null : Number(item.jumlah_jam_koreksi),
+      jumlahJamKoreksi:
+         item.jumlah_jam_koreksi == null
+            ? null
+            : Number(item.jumlah_jam_koreksi),
       catatanKoreksi: item.catatan_koreksi || "",
       status: statusCode.toLowerCase(),
-      currentApproverRole: item.status?.role?.kode_role?.toLowerCase() || "maker",
+      currentApproverRole:
+         item.status?.role?.kode_role?.toLowerCase() || "maker",
       isFinal: item.status?.is_final === "Y",
    };
 };
@@ -230,19 +287,31 @@ export const LemburPage = ({
 
    const loadLemburFromApi = async () => {
       try {
-         const idPetugas = currentUser?.id_petugas || currentUser?.petugas?.id_petugas;
+         const idPetugas =
+            currentUser?.id_petugas || currentUser?.petugas?.id_petugas;
          const [lemburRows, petugasRows] = await Promise.all([
             idPetugas ? api.getLemburByPetugas(idPetugas) : api.getLembur(),
             api.getPetugas(),
          ]);
-         setApiLembur((Array.isArray(lemburRows) ? lemburRows : []).map(mapApiLembur));
+         setApiLembur(
+            (Array.isArray(lemburRows) ? lemburRows : []).map(mapApiLembur),
+         );
          setApiOfficers(Array.isArray(petugasRows) ? petugasRows : []);
       } catch (error) {
-         setAlertModal({ isOpen: true, type: "error", title: "Gagal Memuat Lembur", message: error.response?.data?.message || "Data lembur dari API gagal dimuat." });
+         setAlertModal({
+            isOpen: true,
+            type: "error",
+            title: "Gagal Memuat Lembur",
+            message:
+               error.response?.data?.message ||
+               "Data lembur dari API gagal dimuat.",
+         });
       }
    };
 
-   useEffect(() => { loadLemburFromApi(); }, [currentUser?.id_petugas, currentUser?.petugas?.id_petugas]);
+   useEffect(() => {
+      loadLemburFromApi();
+   }, [currentUser?.id_petugas, currentUser?.petugas?.id_petugas]);
 
    useEffect(() => {
       if (editIdParam) {
@@ -287,7 +356,13 @@ export const LemburPage = ({
    const mapping = getDynamicOvertimeMapping();
    const allOfficers = apiOfficers
       .filter((item) => item.is_active !== "N" && item.nip !== currentUser?.nip)
-      .map((item) => ({ ...item, name: item.nama, garduInduk: item.unit?.nama_unit, jabatan: item.jabatan?.nama_jabatan, role: "maker" }));
+      .map((item) => ({
+         ...item,
+         name: item.nama,
+         garduInduk: item.unit?.nama_unit,
+         jabatan: item.jabatan?.nama_jabatan,
+         role: "maker",
+      }));
 
    // Derived conditional flags based on Jenis Pekerjaan
    const isOperatorCuti =
@@ -297,10 +372,15 @@ export const LemburPage = ({
    // Task 2: Filter Pendamping / Rekan Lembur by same Gardu Induk as applicant & status TAD if Operator Cuti
    const filteredOfficers = allOfficers.filter((u) => {
       if (isOperatorCuti) {
-         const currentUnitId = currentUser?.id_unit || currentUser?.petugas?.id_unit || currentUser?.pegawai?.id_unit;
+         const currentUnitId =
+            currentUser?.id_unit ||
+            currentUser?.petugas?.id_unit ||
+            currentUser?.pegawai?.id_unit;
          const matchGI = currentUnitId
             ? String(u.id_unit) === String(currentUnitId)
-            : (!currentUser?.garduInduk || currentUser.garduInduk === "Semua GI" || u.garduInduk === currentUser.garduInduk);
+            : !currentUser?.garduInduk ||
+              currentUser.garduInduk === "Semua GI" ||
+              u.garduInduk === currentUser.garduInduk;
 
          const isTad =
             u.status === "TAD" ||
@@ -442,9 +522,22 @@ export const LemburPage = ({
    const handleConfirmRevision = async (notes, targetRole) => {
       if (!revisionSub) return;
       try {
-         await api.reviseLembur(revisionSub.id_lembur, notes, targetRole || "maker");
-         setIsRevisionModalOpen(false); setRevisionSub(null); await loadLemburFromApi();
-      } catch (error) { setAlertModal({ isOpen: true, type: "error", title: "Gagal Meminta Revisi", message: error.response?.data?.message || error.message }); }
+         await api.reviseLembur(
+            revisionSub.id_lembur,
+            notes,
+            targetRole || "maker",
+         );
+         setIsRevisionModalOpen(false);
+         setRevisionSub(null);
+         await loadLemburFromApi();
+      } catch (error) {
+         setAlertModal({
+            isOpen: true,
+            type: "error",
+            title: "Gagal Meminta Revisi",
+            message: error.response?.data?.message || error.message,
+         });
+      }
    };
    const calculatedDuration = calculateHoursDifference(jamMulai, jamSelesai);
    const estimatedCost = calculateOvertimeCost(
@@ -505,7 +598,12 @@ export const LemburPage = ({
       const file = e.target.files?.[0];
       if (!file) return;
       if (file.size > 5 * 1024 * 1024) {
-         setAlertModal({ isOpen: true, type: "error", title: "File Terlalu Besar", message: `${file.name} melebihi batas maksimum 5 MB.` });
+         setAlertModal({
+            isOpen: true,
+            type: "error",
+            title: "File Terlalu Besar",
+            message: `${file.name} melebihi batas maksimum 5 MB.`,
+         });
          e.target.value = "";
          return;
       }
@@ -528,11 +626,15 @@ export const LemburPage = ({
    };
 
    const buildApiPayload = () => {
-      const idPetugas = currentUser?.id_petugas || currentUser?.petugas?.id_petugas;
-      const partner = allOfficers.find((item) => item.nip === petugasPendampingNip);
+      const idPetugas =
+         currentUser?.id_petugas || currentUser?.petugas?.id_petugas;
+      const partner = allOfficers.find(
+         (item) => item.nip === petugasPendampingNip,
+      );
       const formData = new FormData();
       formData.append("id_petugas", String(idPetugas || ""));
-      if (showPetugasPendamping && partner?.id_petugas) formData.append("id_petugas_cuti", String(partner.id_petugas));
+      if (showPetugasPendamping && partner?.id_petugas)
+         formData.append("id_petugas_cuti", String(partner.id_petugas));
       formData.append("tgl_lembur", tanggalLembur);
       formData.append("jam_mulai", jamMulai);
       formData.append("jam_selesai", jamSelesai);
@@ -541,25 +643,47 @@ export const LemburPage = ({
       formData.append("area_group", areaGroup);
       formData.append("is_hari_libur", isHariLibur ? "Y" : "N");
       formData.append("detail_pekerjaan_lembur", kegiatanDetail);
-      formData.append("keterangan", `${kategoriLembur} - ${jenisPekerjaan} (${calculatedDuration} Jam)`);
-      if (fotoKegiatan1File) formData.append("foto_kegiatan_1", fotoKegiatan1File);
-      if (fotoKegiatan2File) formData.append("foto_kegiatan_2", fotoKegiatan2File);
-      if (suratPerintahFile) formData.append("surat_perintah_lembur", suratPerintahFile);
-      if (makerSignatureUrl?.startsWith("data:")) formData.append("maker_signature", dataUrlToFile(makerSignatureUrl, "maker-signature.png"));
+      formData.append(
+         "keterangan",
+         `${kategoriLembur} - ${jenisPekerjaan} (${calculatedDuration} Jam)`,
+      );
+      if (fotoKegiatan1File)
+         formData.append("foto_kegiatan_1", fotoKegiatan1File);
+      if (fotoKegiatan2File)
+         formData.append("foto_kegiatan_2", fotoKegiatan2File);
+      if (suratPerintahFile)
+         formData.append("surat_perintah_lembur", suratPerintahFile);
+      if (makerSignatureUrl?.startsWith("data:"))
+         formData.append(
+            "maker_signature",
+            dataUrlToFile(makerSignatureUrl, "maker-signature.png"),
+         );
       return formData;
    };
 
    const saveToApi = async ({ release = false } = {}) => {
-      const idPetugas = currentUser?.id_petugas || currentUser?.petugas?.id_petugas;
-      if (!idPetugas) throw new Error("Akun login belum terhubung ke data petugas (id_petugas).");
+      const idPetugas =
+         currentUser?.id_petugas || currentUser?.petugas?.id_petugas;
+      if (!idPetugas)
+         throw new Error(
+            "Akun login belum terhubung ke data petugas (id_petugas).",
+         );
       const isCreate = !editingSub?.id_lembur;
-      if (isCreate && (!fotoKegiatan1File || !fotoKegiatan2File || !suratPerintahFile)) {
-         throw new Error("Backend mewajibkan Foto Kegiatan 1, Foto Kegiatan 2, dan Surat Perintah Lembur saat membuat data.");
+      if (
+         isCreate &&
+         (!fotoKegiatan1File || !fotoKegiatan2File || !suratPerintahFile)
+      ) {
+         throw new Error(
+            "Backend mewajibkan Foto Kegiatan 1, Foto Kegiatan 2, dan Surat Perintah Lembur saat membuat data.",
+         );
       }
       const response = isCreate
          ? await api.createLembur(buildApiPayload())
          : await api.updateLembur(editingSub.id_lembur, buildApiPayload());
-      const savedId = response?.data?.id_lembur || response?.id_lembur || editingSub?.id_lembur;
+      const savedId =
+         response?.data?.id_lembur ||
+         response?.id_lembur ||
+         editingSub?.id_lembur;
       if (release && savedId) await api.releaseLembur(savedId);
       await loadLemburFromApi();
       return savedId;
@@ -661,7 +785,12 @@ export const LemburPage = ({
          payload.id = String(savedId);
          payload.nomorDokumen = `LMB-${String(savedId).padStart(6, "0")}`;
       } catch (error) {
-         setAlertModal({ isOpen: true, type: "error", title: "Gagal Simpan Draft Lembur", message: error.response?.data?.message || error.message });
+         setAlertModal({
+            isOpen: true,
+            type: "error",
+            title: "Gagal Simpan Draft Lembur",
+            message: error.response?.data?.message || error.message,
+         });
          return;
       }
       setIsNewModalOpen(false);
@@ -789,11 +918,27 @@ export const LemburPage = ({
          await saveToApi({ release: true });
          setIsNewModalOpen(false);
          setEditingSub(null);
-         setAlertModal({ isOpen: true, type: "success", title: "Pengajuan Berhasil Dikirim", message: "Pengajuan lembur berhasil disimpan dan diteruskan ke tahap berikutnya." });
-         setKegiatanDetail(""); setFotoDokumentasi1Url(""); setFotoDokumentasi2Url(""); setDasarPerintahLemburUrl(""); setDasarPerintahLemburName(""); setPetugasPendampingNip("");
+         setAlertModal({
+            isOpen: true,
+            type: "success",
+            title: "Pengajuan Berhasil Dikirim",
+            message:
+               "Pengajuan lembur berhasil disimpan dan diteruskan ke tahap berikutnya.",
+         });
+         setKegiatanDetail("");
+         setFotoDokumentasi1Url("");
+         setFotoDokumentasi2Url("");
+         setDasarPerintahLemburUrl("");
+         setDasarPerintahLemburName("");
+         setPetugasPendampingNip("");
          onRefreshData?.();
       } catch (error) {
-         setAlertModal({ isOpen: true, type: "error", title: "Gagal Kirim Pengajuan Lembur", message: error.response?.data?.message || error.message });
+         setAlertModal({
+            isOpen: true,
+            type: "error",
+            title: "Gagal Kirim Pengajuan Lembur",
+            message: error.response?.data?.message || error.message,
+         });
       }
       return;
 
@@ -967,8 +1112,18 @@ export const LemburPage = ({
          return;
       }
 
-      try { await api.releaseLembur(sub.id_lembur); await loadLemburFromApi(); }
-      catch (error) { setAlertModal({ isOpen: true, type: "error", title: "Gagal Kirim Pengajuan", message: error.response?.data?.message || error.message }); return; }
+      try {
+         await api.releaseLembur(sub.id_lembur);
+         await loadLemburFromApi();
+      } catch (error) {
+         setAlertModal({
+            isOpen: true,
+            type: "error",
+            title: "Gagal Kirim Pengajuan",
+            message: error.response?.data?.message || error.message,
+         });
+         return;
+      }
       setAlertModal({
          isOpen: true,
          type: "success",
@@ -1084,12 +1239,32 @@ export const LemburPage = ({
       if (!rejectSub) return;
       try {
          await api.rejectLembur(rejectSub.id_lembur, notes);
-         setIsRejectModalOpen(false); setRejectSub(null); await loadLemburFromApi(); onRefreshData?.();
-      } catch (error) { setAlertModal({ isOpen: true, type: "error", title: "Gagal Menolak Lembur", message: error.response?.data?.message || error.message }); }
+         setIsRejectModalOpen(false);
+         setRejectSub(null);
+         await loadLemburFromApi();
+         onRefreshData?.();
+      } catch (error) {
+         setAlertModal({
+            isOpen: true,
+            type: "error",
+            title: "Gagal Menolak Lembur",
+            message: error.response?.data?.message || error.message,
+         });
+      }
    };
    const handleResubmit = async (sub) => {
-      try { await api.releaseLembur(sub.id_lembur); await loadLemburFromApi(); onRefreshData?.(); }
-      catch (error) { setAlertModal({ isOpen: true, type: "error", title: "Gagal Mengirim Ulang", message: error.response?.data?.message || error.message }); }
+      try {
+         await api.releaseLembur(sub.id_lembur);
+         await loadLemburFromApi();
+         onRefreshData?.();
+      } catch (error) {
+         setAlertModal({
+            isOpen: true,
+            type: "error",
+            title: "Gagal Mengirim Ulang",
+            message: error.response?.data?.message || error.message,
+         });
+      }
    };
    const handleApproveSignatureSave = async (dataUrl) => {
       if (!approveSub) return;
@@ -1097,13 +1272,36 @@ export const LemburPage = ({
       try {
          const workflowPayload = new FormData();
          const signatureField = getSignatureField(currentUser?.role);
-         if (signatureField && dataUrl?.startsWith("data:")) workflowPayload.append(signatureField, dataUrlToFile(dataUrl, `${signatureField}.png`));
-         if (checkerExtraData.jumlahJamKoreksi != null) workflowPayload.append("jumlah_jam_koreksi", String(checkerExtraData.jumlahJamKoreksi));
-         if (checkerExtraData.catatanKoreksi) workflowPayload.append("catatan_koreksi", checkerExtraData.catatanKoreksi);
-         const response = await api.releaseLembur(approveSub.id_lembur, workflowPayload);
-         updatedSub = mapApiLembur(response?.data || response); await loadLemburFromApi();
+         if (signatureField && dataUrl?.startsWith("data:"))
+            workflowPayload.append(
+               signatureField,
+               dataUrlToFile(dataUrl, `${signatureField}.png`),
+            );
+         if (checkerExtraData.jumlahJamKoreksi != null)
+            workflowPayload.append(
+               "jumlah_jam_koreksi",
+               String(checkerExtraData.jumlahJamKoreksi),
+            );
+         if (checkerExtraData.catatanKoreksi)
+            workflowPayload.append(
+               "catatan_koreksi",
+               checkerExtraData.catatanKoreksi,
+            );
+         const response = await api.releaseLembur(
+            approveSub.id_lembur,
+            workflowPayload,
+         );
+         updatedSub = mapApiLembur(response?.data || response);
+         await loadLemburFromApi();
+      } catch (error) {
+         setAlertModal({
+            isOpen: true,
+            type: "error",
+            title: "Gagal Memproses Lembur",
+            message: error.response?.data?.message || error.message,
+         });
+         return;
       }
-      catch (error) { setAlertModal({ isOpen: true, type: "error", title: "Gagal Memproses Lembur", message: error.response?.data?.message || error.message }); return; }
       setIsApproveSignOpen(false);
       setApproveSub(null);
       setCheckerExtraData({});
@@ -1142,8 +1340,18 @@ export const LemburPage = ({
    };
 
    const handleDeleteLembur = async (sub) => {
-      try { await api.deleteLembur(sub.id_lembur); await loadLemburFromApi(); onRefreshData?.(); }
-      catch (error) { setAlertModal({ isOpen: true, type: "error", title: "Gagal Menghapus Lembur", message: error.response?.data?.message || error.message }); }
+      try {
+         await api.deleteLembur(sub.id_lembur);
+         await loadLemburFromApi();
+         onRefreshData?.();
+      } catch (error) {
+         setAlertModal({
+            isOpen: true,
+            type: "error",
+            title: "Gagal Menghapus Lembur",
+            message: error.response?.data?.message || error.message,
+         });
+      }
    };
 
    const handleOpenDetail = async (sub) => {
@@ -1151,7 +1359,12 @@ export const LemburPage = ({
          const record = await api.getLemburById(sub.id_lembur);
          setDetailSub(mapApiLembur(record));
       } catch (error) {
-         setAlertModal({ isOpen: true, type: "error", title: "Gagal Memuat Detail", message: error.response?.data?.message || error.message });
+         setAlertModal({
+            isOpen: true,
+            type: "error",
+            title: "Gagal Memuat Detail",
+            message: error.response?.data?.message || error.message,
+         });
       }
    };
    return (
@@ -1310,7 +1523,8 @@ export const LemburPage = ({
                   ) : (
                      displaySubmissions.map((sub) => {
                         const canApprove =
-                           currentUser.role !== "maker" && currentUser.role === sub.currentApproverRole;
+                           currentUser.role !== "maker" &&
+                           currentUser.role === sub.currentApproverRole;
                         const sLower = sub.status
                            ? sub.status.toLowerCase()
                            : "";
@@ -1480,7 +1694,8 @@ export const LemburPage = ({
                                              className="group/action relative w-9 h-9 text-amber-800 bg-amber-100 active:bg-amber-200 hover:bg-amber-200 rounded-xl inline-flex items-center justify-center transition cursor-pointer"
                                              aria-label="Edit"
                                           >
-                                             <Edit3 className="w-4 h-4" /><ActionTooltip text="Edit" />
+                                             <Edit3 className="w-4 h-4" />
+                                             <ActionTooltip text="Edit" />
                                           </button>
                                        </>
                                     )}
@@ -1496,7 +1711,8 @@ export const LemburPage = ({
                                              className="group/action relative w-9 h-9 text-slate-700 bg-slate-200 hover:bg-slate-300 rounded-xl inline-flex items-center justify-center transition cursor-pointer"
                                              aria-label="Edit"
                                           >
-                                             <Edit3 className="w-4 h-4" /><ActionTooltip text="Edit" />
+                                             <Edit3 className="w-4 h-4" />
+                                             <ActionTooltip text="Edit" />
                                           </button>
                                           <button
                                              onClick={() =>
@@ -1505,7 +1721,8 @@ export const LemburPage = ({
                                              className="group/action relative w-9 h-9 text-white bg-sky-600 hover:bg-sky-700 rounded-xl inline-flex items-center justify-center transition cursor-pointer shadow-xs"
                                              aria-label="Kirim"
                                           >
-                                             <Send className="w-4 h-4" /><ActionTooltip text="Kirim" />
+                                             <Send className="w-4 h-4" />
+                                             <ActionTooltip text="Kirim" />
                                           </button>
                                           <button
                                              onClick={() => {
@@ -1520,7 +1737,8 @@ export const LemburPage = ({
                                              className="group/action relative w-9 h-9 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl inline-flex items-center justify-center transition cursor-pointer"
                                              aria-label="Batalkan"
                                           >
-                                             <Trash2 className="w-4 h-4 text-rose-600" /><ActionTooltip text="Batalkan" />
+                                             <Trash2 className="w-4 h-4 text-rose-600" />
+                                             <ActionTooltip text="Batalkan" />
                                           </button>
                                        </>
                                     )}
@@ -1530,9 +1748,17 @@ export const LemburPage = ({
                                     className="group/action relative w-9 h-9 text-indigo-700 bg-indigo-50 active:bg-indigo-100 rounded-xl inline-flex items-center justify-center transition cursor-pointer"
                                     aria-label="Detail"
                                  >
-                                    <Eye className="w-4 h-4" /><ActionTooltip text="Detail" />
+                                    <Eye className="w-4 h-4" />
+                                    <ActionTooltip text="Detail" />
                                  </button>
-                                 <button onClick={() => setSelectedDocSub(sub)} className="group/action relative w-9 h-9 text-emerald-700 bg-emerald-50 active:bg-emerald-100 rounded-xl inline-flex items-center justify-center transition cursor-pointer" aria-label="Document"><FileCheck className="w-4 h-4" /><ActionTooltip text="Document" /></button>
+                                 <button
+                                    onClick={() => setSelectedDocSub(sub)}
+                                    className="group/action relative w-9 h-9 text-emerald-700 bg-emerald-50 active:bg-emerald-100 rounded-xl inline-flex items-center justify-center transition cursor-pointer"
+                                    aria-label="Document"
+                                 >
+                                    <FileCheck className="w-4 h-4" />
+                                    <ActionTooltip text="Document" />
+                                 </button>
                               </div>
                            </div>
                         );
@@ -1560,7 +1786,8 @@ export const LemburPage = ({
                      <tbody className="divide-y divide-slate-200">
                         {displaySubmissions.map((sub) => {
                            const canApprove =
-                              currentUser.role !== "maker" && currentUser.role === sub.currentApproverRole;
+                              currentUser.role !== "maker" &&
+                              currentUser.role === sub.currentApproverRole;
                            const sLower = sub.status
                               ? sub.status.toLowerCase()
                               : "";
@@ -1728,7 +1955,8 @@ export const LemburPage = ({
                                                       className="group/action relative w-9 h-9 text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-lg inline-flex items-center justify-center transition cursor-pointer"
                                                       aria-label="Edit"
                                                    >
-                                                      <Edit3 className="w-4 h-4" /><ActionTooltip text="Edit" />
+                                                      <Edit3 className="w-4 h-4" />
+                                                      <ActionTooltip text="Edit" />
                                                    </button>
                                                 </>
                                              )}
@@ -1749,7 +1977,8 @@ export const LemburPage = ({
                                                       className="group/action relative w-9 h-9 text-slate-700 bg-slate-200 hover:bg-slate-300 rounded-lg inline-flex items-center justify-center transition cursor-pointer"
                                                       aria-label="Edit"
                                                    >
-                                                      <Edit3 className="w-4 h-4" /><ActionTooltip text="Edit" />
+                                                      <Edit3 className="w-4 h-4" />
+                                                      <ActionTooltip text="Edit" />
                                                    </button>
                                                    <button
                                                       onClick={() =>
@@ -1760,7 +1989,8 @@ export const LemburPage = ({
                                                       className="group/action relative w-9 h-9 text-white bg-sky-600 hover:bg-sky-700 rounded-lg inline-flex items-center justify-center transition cursor-pointer shadow-xs"
                                                       aria-label="Kirim"
                                                    >
-                                                      <Send className="w-4 h-4" /><ActionTooltip text="Kirim" />
+                                                      <Send className="w-4 h-4" />
+                                                      <ActionTooltip text="Kirim" />
                                                    </button>
                                                    <button
                                                       onClick={() => {
@@ -1769,25 +1999,40 @@ export const LemburPage = ({
                                                                "Apakah Anda yakin ingin membatalkan draft lembur ini? Status akan diubah menjadi Dibatalkan.",
                                                             )
                                                          ) {
-                                                            handleDeleteLembur(sub);
+                                                            handleDeleteLembur(
+                                                               sub,
+                                                            );
                                                          }
                                                       }}
                                                       className="group/action relative w-9 h-9 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg inline-flex items-center justify-center transition cursor-pointer"
                                                       aria-label="Batalkan"
                                                    >
-                                                      <Trash2 className="w-4 h-4 text-rose-600" /><ActionTooltip text="Batalkan" />
+                                                      <Trash2 className="w-4 h-4 text-rose-600" />
+                                                      <ActionTooltip text="Batalkan" />
                                                    </button>
                                                 </>
                                              )}
 
                                           <button
-                                             onClick={() => handleOpenDetail(sub)}
+                                             onClick={() =>
+                                                handleOpenDetail(sub)
+                                             }
                                              className="group/action relative w-9 h-9 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg inline-flex items-center justify-center transition cursor-pointer"
                                              aria-label="Detail"
                                           >
-                                             <Eye className="w-4 h-4" /><ActionTooltip text="Detail" />
+                                             <Eye className="w-4 h-4" />
+                                             <ActionTooltip text="Detail" />
                                           </button>
-                                          <button onClick={() => setSelectedDocSub(sub)} className="group/action relative w-9 h-9 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg inline-flex items-center justify-center transition cursor-pointer" aria-label="Document"><FileCheck className="w-4 h-4" /><ActionTooltip text="Document" /></button>
+                                          <button
+                                             onClick={() =>
+                                                setSelectedDocSub(sub)
+                                             }
+                                             className="group/action relative w-9 h-9 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg inline-flex items-center justify-center transition cursor-pointer"
+                                             aria-label="Document"
+                                          >
+                                             <FileCheck className="w-4 h-4" />
+                                             <ActionTooltip text="Document" />
+                                          </button>
                                        </div>
                                     </td>
                                  </tr>
@@ -2509,30 +2754,146 @@ export const LemburPage = ({
 
          {/* Detail Data API & Uploaded Files */}
          {detailSub && (
-            <div className="fixed inset-0 z-[60] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5" onMouseDown={(event) => event.target === event.currentTarget && setDetailSub(null)}>
+            <div
+               className="fixed inset-0 z-[60] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5"
+               onMouseDown={(event) =>
+                  event.target === event.currentTarget && setDetailSub(null)
+               }
+            >
                <div className="bg-white w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl shadow-2xl border border-slate-200">
                   <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-md px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                     <div><p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Detail Pengajuan Lembur</p><h3 className="font-black text-slate-900 mt-0.5">{detailSub.nomorDokumen}</h3></div>
-                     <button type="button" onClick={() => setDetailSub(null)} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 inline-flex items-center justify-center" aria-label="Tutup detail"><X className="w-5 h-5" /></button>
+                     <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                           Detail Pengajuan Lembur
+                        </p>
+                        <h3 className="font-black text-slate-900 mt-0.5">
+                           {detailSub.nomorDokumen}
+                        </h3>
+                     </div>
+                     <button
+                        type="button"
+                        onClick={() => setDetailSub(null)}
+                        className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 inline-flex items-center justify-center"
+                        aria-label="Tutup detail"
+                     >
+                        <X className="w-5 h-5" />
+                     </button>
                   </div>
                   <div className="p-5 space-y-5">
                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        <DetailItem label="Petugas" value={`${detailSub.employeeName || "-"} (${detailSub.employeeNip || "-"})`} />
-                        <DetailItem label="Unit" value={detailSub.garduInduk || detailSub.unitUpt || "-"} />
-                        <DetailItem label="Tanggal" value={formatDateIndonesian(detailSub.tanggalLembur)} />
-                        <DetailItem label="Jam & Durasi" value={`${detailSub.jamMulai || "-"} - ${detailSub.jamSelesai || "-"} (${detailSub.durasiJam || 0} Jam)`} />
-                        <DetailItem label="Kategori" value={detailSub.kategoriLembur || "-"} />
-                        <DetailItem label="Jenis Pekerjaan" value={detailSub.jenisPekerjaan || "-"} />
-                        <DetailItem label="Area / Group" value={detailSub.areaGroup || "-"} />
-                        <DetailItem label="Status" value={getStatusLabel(detailSub.status)} />
-                        <DetailItem label="Petugas Digantikan" value={detailSub.petugasPendampingNama ? `${detailSub.petugasPendampingNama} (${detailSub.petugasPendampingNip})` : "-"} />
-                        <DetailItem label="Hari Libur" value={detailSub.isHariLibur ? "Ya" : "Tidak"} />
-                        <DetailItem label="Jam Koreksi" value={detailSub.jumlahJamKoreksi == null ? "-" : `${detailSub.jumlahJamKoreksi} Jam`} />
-                        <DetailItem label="Catatan Koreksi" value={detailSub.catatanKoreksi || "-"} />
+                        <DetailItem
+                           label="Petugas"
+                           value={`${detailSub.employeeName || "-"} (${detailSub.employeeNip || "-"})`}
+                        />
+                        <DetailItem
+                           label="Unit"
+                           value={
+                              detailSub.garduInduk || detailSub.unitUpt || "-"
+                           }
+                        />
+                        <DetailItem
+                           label="Tanggal"
+                           value={formatDateIndonesian(detailSub.tanggalLembur)}
+                        />
+                        <DetailItem
+                           label="Jam & Durasi"
+                           value={`${detailSub.jamMulai || "-"} - ${detailSub.jamSelesai || "-"} (${detailSub.durasiJam || 0} Jam)`}
+                        />
+                        <DetailItem
+                           label="Kategori"
+                           value={detailSub.kategoriLembur || "-"}
+                        />
+                        <DetailItem
+                           label="Jenis Pekerjaan"
+                           value={detailSub.jenisPekerjaan || "-"}
+                        />
+                        <DetailItem
+                           label="Area / Group"
+                           value={detailSub.areaGroup || "-"}
+                        />
+                        <DetailItem
+                           label="Status"
+                           value={getStatusLabel(detailSub.status)}
+                        />
+                        <DetailItem
+                           label="Petugas Digantikan"
+                           value={
+                              detailSub.petugasPendampingNama
+                                 ? `${detailSub.petugasPendampingNama} (${detailSub.petugasPendampingNip})`
+                                 : "-"
+                           }
+                        />
+                        <DetailItem
+                           label="Hari Libur"
+                           value={detailSub.isHariLibur ? "Ya" : "Tidak"}
+                        />
+                        <DetailItem
+                           label="Jam Koreksi"
+                           value={
+                              detailSub.jumlahJamKoreksi == null
+                                 ? "-"
+                                 : `${detailSub.jumlahJamKoreksi} Jam`
+                           }
+                        />
+                        <DetailItem
+                           label="Catatan Koreksi"
+                           value={detailSub.catatanKoreksi || "-"}
+                        />
                      </div>
-                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200"><p className="text-[10px] uppercase tracking-wider font-black text-slate-400">Detail Pekerjaan</p><p className="text-xs font-semibold text-slate-800 mt-2 whitespace-pre-wrap">{detailSub.kegiatanDetail || "-"}</p></div>
-                     <div><h4 className="text-xs font-black text-slate-900 mb-3 flex items-center gap-2"><Upload className="w-4 h-4 text-indigo-600" /> Dokumen &amp; Evidence</h4><div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><FilePreview label="Foto Kegiatan 1" url={detailSub.fotoDokumentasi1Url} /><FilePreview label="Foto Kegiatan 2" url={detailSub.fotoDokumentasi2Url} /><FilePreview label="Surat Perintah Lembur" url={detailSub.dasarPerintahLemburUrl} /></div></div>
-                     <div><h4 className="text-xs font-black text-slate-900 mb-3 flex items-center gap-2"><FileCheck className="w-4 h-4 text-emerald-600" /> Signature Workflow</h4><div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{[["Maker", detailSub.makerSignatureUrl], ["Checker", detailSub.checkerSignatureUrl], ["Verification", detailSub.verificationSignatureUrl], ["Approval 1", detailSub.approval1SignatureUrl], ["Approval 2", detailSub.approval2SignatureUrl], ["Approval 3", detailSub.approval3SignatureUrl]].map(([label, url]) => <FilePreview key={label} label={label} url={url} compact />)}</div></div>
+                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+                        <p className="text-[10px] uppercase tracking-wider font-black text-slate-400">
+                           Detail Pekerjaan
+                        </p>
+                        <p className="text-xs font-semibold text-slate-800 mt-2 whitespace-pre-wrap">
+                           {detailSub.kegiatanDetail || "-"}
+                        </p>
+                     </div>
+                     <div>
+                        <h4 className="text-xs font-black text-slate-900 mb-3 flex items-center gap-2">
+                           <Upload className="w-4 h-4 text-indigo-600" />{" "}
+                           Dokumen &amp; Evidence
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                           <FilePreview
+                              label="Foto Kegiatan 1"
+                              url={detailSub.fotoDokumentasi1Url}
+                           />
+                           <FilePreview
+                              label="Foto Kegiatan 2"
+                              url={detailSub.fotoDokumentasi2Url}
+                           />
+                           <FilePreview
+                              label="Surat Perintah Lembur"
+                              url={detailSub.dasarPerintahLemburUrl}
+                           />
+                        </div>
+                     </div>
+                     <div>
+                        <h4 className="text-xs font-black text-slate-900 mb-3 flex items-center gap-2">
+                           <FileCheck className="w-4 h-4 text-emerald-600" />{" "}
+                           Signature Workflow
+                        </h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                           {[
+                              ["Maker", detailSub.makerSignatureUrl],
+                              ["Checker", detailSub.checkerSignatureUrl],
+                              [
+                                 "Verification",
+                                 detailSub.verificationSignatureUrl,
+                              ],
+                              ["Approval 1", detailSub.approval1SignatureUrl],
+                              ["Approval 2", detailSub.approval2SignatureUrl],
+                              ["Approval 3", detailSub.approval3SignatureUrl],
+                           ].map(([label, url]) => (
+                              <FilePreview
+                                 key={label}
+                                 label={label}
+                                 url={url}
+                                 compact
+                              />
+                           ))}
+                        </div>
+                     </div>
                   </div>
                </div>
             </div>
