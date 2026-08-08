@@ -1,0 +1,6 @@
+{
+  "name": "E-PRESENSI PLN - Digital Workforce Management",
+  "description": "Aplikasi E-PRESENSI UP2 JATENG DIY untuk Dokumentasi Digital Tenaga Kerja, Alur Persetujuan 6-Tingkat (Maker, Checker, Verifikasi, Approved 1, Approved 2, Approved 3), Lembur, Cuti, Ijin, Sakit, SPPD, dan Laporan Otomatis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
