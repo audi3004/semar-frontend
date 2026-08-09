@@ -165,7 +165,7 @@ export const AttendanceChart = ({
   const chartData = useMemo(() => {
     if (!submissions || submissions.length === 0) {
       if (data && data.length > 0) return data;
-      return [];
+      return DEFAULT_TAD_TREND_DATA;
     }
 
     // Filter active (non-rejected) submissions
@@ -177,8 +177,7 @@ export const AttendanceChart = ({
     if (level === "tahun") {
       // Group by Year
       const yearMap = {};
-      const currentYear = new Date().getFullYear();
-      const targetYears = [currentYear - 2, currentYear - 1, currentYear];
+      const targetYears = [2024, 2025, 2026];
       targetYears.forEach((y) => {
         yearMap[y] = {
           tickLabel: `${y}`,
