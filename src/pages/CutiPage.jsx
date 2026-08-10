@@ -9,6 +9,7 @@ import { RevisionModal } from "../components/common/RevisionModal";
 import { AlertNotificationModal } from "../components/common/AlertNotificationModal";
 import { LoadingSkeleton } from "../components/common/LoadingSkeleton";
 import { validateCutiInput } from "../utils/submissionValidation";
+import { resolveBackendFileFields, resolveBackendFileUrl } from "../utils/fileUrl";
 import { Palmtree, Plus, Check, Eye, Users, XCircle, RotateCcw, Edit3, AlertTriangle, Save, Send, Trash2 } from "lucide-react";
 import {
   formatDateIndonesian,
@@ -41,7 +42,6 @@ export const CutiPage = ({
   const [alamatSelamaCuti, setAlamatSelamaCuti] = useState("");
   const [nomorTeleponDarurat, setNomorTeleponDarurat] = useState("");
   const [keterangan, setKeterangan] = useState("");
-  const [pengganti, setPengganti] = useState("");
   const [makerSignatureUrl, setMakerSignatureUrl] = useState("");
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [editingSub, setEditingSub] = useState(null);
@@ -53,7 +53,6 @@ export const CutiPage = ({
   const [revisionSub, setRevisionSub] = useState(null);
   const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
   const [apiCuti, setApiCuti] = useState([]);
-  const [petugasUnit, setPetugasUnit] = useState([]);
 
   const getApiError = (error) => error?.response?.data?.message || error?.message || "Terjadi kesalahan saat menghubungi server.";
   const normalizeStatus = (item) => {
@@ -66,6 +65,7 @@ export const CutiPage = ({
   };
   const mapCuti = (item) => ({
     ...item,
+    ...resolveBackendFileFields(item),
     id: String(item.id_cuti),
     type: "cuti",
     nomorDokumen: item.no_cuti,
@@ -80,9 +80,8 @@ export const CutiPage = ({
     jumlahHari: Number(item.lama_hari || 0),
     alamatSelamaCuti: item.contact_alamat || "",
     nomorTeleponDarurat: item.nomor_telepon_darurat || "",
-    makerSignatureUrl: item.maker_signature || "",
+    makerSignatureUrl: resolveBackendFileUrl(item.maker_signature),
     keterangan: item.perihal || "",
-    pengganti: item.pengganti || "",
     status: normalizeStatus(item),
     currentApproverRole: item.status?.role?.kode_role?.toLowerCase() || "maker"
   });
@@ -94,24 +93,12 @@ export const CutiPage = ({
       setAlertModal({ isOpen: true, type: "error", title: "Gagal Memuat Data Cuti", message: getApiError(error) });
     }
   };
-  const loadPetugasUnit = async () => {
-    try {
-      const rows = await api.getPetugas();
-      const idUnit = Number(currentUser?.petugas?.id_unit || currentUser?.petugas?.unit?.id_unit || currentUser?.id_unit);
-      const ownId = Number(currentUser?.id_petugas || currentUser?.petugas?.id_petugas);
-      setPetugasUnit((Array.isArray(rows) ? rows : []).filter((item) =>
-        Number(item.id_unit) === idUnit && Number(item.id_petugas) !== ownId && item.is_active !== "N"
-      ));
-    } catch {
-      setPetugasUnit([]);
-    }
-  };
   const refreshCuti = async () => {
     await loadCuti();
     if (onRefreshData) onRefreshData();
   };
 
-  useEffect(() => { loadCuti(); loadPetugasUnit(); }, []);
+  useEffect(() => { loadCuti(); }, []);
 
   const cutiSubmissions = apiCuti;
 
@@ -191,8 +178,7 @@ export const CutiPage = ({
       tgl_mulai: tanggalMulai,
       tgl_selesai: tanggalSelesai,
       contact_alamat: alamatSelamaCuti || null,
-      nomor_telepon_darurat: nomorTeleponDarurat || null,
-      pengganti: pengganti || null
+      nomor_telepon_darurat: nomorTeleponDarurat || null
     };
     const formData = new FormData();
     Object.entries(values).forEach(([key, value]) => {
@@ -211,7 +197,6 @@ export const CutiPage = ({
     setAlamatSelamaCuti(sub.alamatSelamaCuti || "");
     setNomorTeleponDarurat(sub.nomorTeleponDarurat || "");
     setKeterangan(sub.keterangan || "");
-    setPengganti(sub.pengganti || "");
     setMakerSignatureUrl(sub.makerSignatureUrl || "");
     setIsNewModalOpen(true);
   };
@@ -233,7 +218,6 @@ export const CutiPage = ({
     setAlamatSelamaCuti("");
     setNomorTeleponDarurat("");
     setKeterangan("");
-    setPengganti("");
     setMakerSignatureUrl("");
     setIsNewModalOpen(true);
   };
@@ -1203,25 +1187,6 @@ export const CutiPage = ({
                     className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block font-bold mb-1 text-slate-800">Petugas Pengganti</label>
-                <select
-                  value={pengganti}
-                  onChange={(e) => setPengganti(e.target.value)}
-                  className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none cursor-pointer"
-                >
-                  <option value="">-- Pilih Petugas dari Unit yang Sama --</option>
-                  {petugasUnit.map((item) => (
-                    <option key={item.id_petugas} value={item.nama}>
-                      {item.nama} ({item.nip})
-                    </option>
-                  ))}
-                </select>
-                {petugasUnit.length === 0 && (
-                  <p className="mt-1 text-[10px] text-slate-500">Tidak ada petugas aktif lain pada unit yang sama.</p>
-                )}
               </div>
 
               <div>

@@ -9,6 +9,7 @@ import { RevisionModal } from "../components/common/RevisionModal";
 import { AlertNotificationModal } from "../components/common/AlertNotificationModal";
 import { LoadingSkeleton } from "../components/common/LoadingSkeleton";
 import { validateSppdInput } from "../utils/submissionValidation";
+import { resolveBackendFileFields, resolveBackendFileUrl } from "../utils/fileUrl";
 import { Briefcase, Plus, Check, Eye, Trash2, XCircle, RotateCcw, Edit3, AlertTriangle, Save, Send } from "lucide-react";
 import { formatRupiah, formatDateIndonesian, getStatusBadgeColor, getStatusLabel } from "../utils/formatters";
 
@@ -99,6 +100,7 @@ export const SppdPage = ({
     ].filter((entry) => entry.nominal > 0 || !entry.deskripsi.startsWith("Biaya "));
     return {
       ...item,
+      ...resolveBackendFileFields(item),
       id: String(item.id_sppd),
       type: "sppd",
       nomorDokumen: item.no_sppd,
@@ -117,7 +119,7 @@ export const SppdPage = ({
       bebanAnggaranUnit: item.beban_anggaran || "",
       expenses: expensesData,
       totalEstimasiBiaya: expensesData.reduce((sum, entry) => sum + entry.nominal, 0),
-      makerSignatureUrl: item.maker_signature || "",
+      makerSignatureUrl: resolveBackendFileUrl(item.maker_signature),
       status: normalizeStatus(item),
       currentApproverRole: item.status?.role?.kode_role?.toLowerCase() || "maker"
     };

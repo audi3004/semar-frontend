@@ -1,7 +1,7 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-const API_BASE = `${API_BASE_URL}/api`;
+const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+const API_BASE = /\/api$/i.test(API_BASE_URL) ? API_BASE_URL : `${API_BASE_URL}/api`;
 
 export const AUTH_STORAGE_KEYS = {
   currentUser: "epresensi_current_user"
@@ -300,6 +300,12 @@ export const api = {
   },
   getLemburByPetugas: async (id) => {
     const res = await apiClient.get(`/lembur/petugas/${id}`);
+    return res.data?.data || [];
+  },
+  getPetugasBerhalangan: async (tanggal) => {
+    const res = await apiClient.get("/lembur/petugas-berhalangan", {
+      params: { tanggal }
+    });
     return res.data?.data || [];
   },
   createLembur: async (payload) => {

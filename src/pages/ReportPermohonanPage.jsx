@@ -142,12 +142,8 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
     return allGroups.filter(g => g.label.toLowerCase().includes(normalizedScope) || normalizedScope.includes(g.label.toLowerCase()));
   }, [userUnitScope]);
 
-  // Set initial selectedUnit from logged in user if available
-  useEffect(() => {
-    if (userUnitScope && (selectedUnit === "all" || !selectedUnit)) {
-      setSelectedUnit(userUnitScope);
-    }
-  }, [userUnitScope, selectedUnit]);
+  // Scope utama berasal dari Navbar melalui daftar submissions yang sudah terfilter.
+  // Filter unit di halaman ini bersifat tambahan dan tidak dipaksa saat halaman dibuka.
 
   // Load saved signatories from localStorage on mount
   useEffect(() => {

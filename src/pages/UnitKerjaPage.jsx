@@ -3,8 +3,6 @@ import { Building2, ChevronDown, ChevronRight, Edit2, Network, Plus, Search, X }
 import { MasterDataService } from "../services/masterDataService";
 import { api } from "../services/api";
 import { toast } from "../utils/toast";
-import { DataPagination, useDataPagination } from "../components/common/DataPagination";
-import { SortableTableHeader, sortTableRows, toggleTableSort } from "../components/common/SortableTableHeader";
 
 const getUnitKind = (name = "") => {
   const value = name.toUpperCase();
@@ -28,7 +26,6 @@ export const UnitKerjaPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [kindFilter, setKindFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("nama_unit"); const [sortOrder, setSortOrder] = useState("asc");
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState(null);
@@ -99,11 +96,8 @@ export const UnitKerjaPage = () => {
       });
     };
     flatten(unitTree);
-    const matches = rows.filter((unit) => (kindFilter === "all" || getUnitKind(unit.nama_unit) === kindFilter) && (statusFilter === "all" || (unit.is_active || "Y") === statusFilter));
-    return sortTableRows(matches, sortBy, sortOrder, { id_unit: (u) => Number(u.id_unit), induk: (u) => u.indukUnit?.nama_unit || "", kind: (u) => getUnitKind(u.nama_unit) });
-  }, [unitTree, expandedIds, searchQuery, kindFilter, statusFilter, sortBy, sortOrder]);
-  const pagination = useDataPagination(visibleRows, [searchQuery, kindFilter, statusFilter, sortBy, sortOrder]);
-  const handleSort = (field) => toggleTableSort(field, sortBy, sortOrder, setSortBy, setSortOrder);
+    return rows.filter((unit) => (kindFilter === "all" || getUnitKind(unit.nama_unit) === kindFilter) && (statusFilter === "all" || (unit.is_active || "Y") === statusFilter));
+  }, [unitTree, expandedIds, searchQuery, kindFilter, statusFilter]);
 
   const toggleExpanded = (id) => {
     setExpandedIds((current) => {
@@ -219,16 +213,16 @@ export const UnitKerjaPage = () => {
         <table className="w-full min-w-[720px] text-xs">
           <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider">
             <tr>
-              <SortableTableHeader field="id_unit" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3 w-24">ID</SortableTableHeader>
-              <SortableTableHeader field="nama_unit" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Hierarki Unit</SortableTableHeader>
-              <SortableTableHeader field="induk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Unit Induk</SortableTableHeader>
-              <SortableTableHeader field="kind" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3 w-28">Jenis</SortableTableHeader>
-              <SortableTableHeader field="is_active" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3 w-28">Status</SortableTableHeader>
+              <th className="px-4 py-3 w-24 text-left">ID</th>
+              <th className="px-4 py-3 text-left">Hierarki Unit</th>
+              <th className="px-4 py-3 text-left">Unit Induk</th>
+              <th className="px-4 py-3 w-28 text-center">Jenis</th>
+              <th className="px-4 py-3 w-28 text-center">Status</th>
               <th className="px-4 py-3 text-center w-24">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {pagination.paginatedItems.map((unit) => {
+            {visibleRows.map((unit) => {
               const hasChildren = unit.children.length > 0;
               const expanded = expandedIds.has(String(unit.id_unit));
               const kind = getUnitKind(unit.nama_unit);
@@ -277,8 +271,6 @@ export const UnitKerjaPage = () => {
           </tbody>
         </table>
       </div>
-
-      <DataPagination {...pagination} />
 
       {isFormOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">

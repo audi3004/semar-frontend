@@ -9,6 +9,7 @@ import { RevisionModal } from "../components/common/RevisionModal";
 import { AlertNotificationModal } from "../components/common/AlertNotificationModal";
 import { LoadingSkeleton } from "../components/common/LoadingSkeleton";
 import { validateIjinInput } from "../utils/submissionValidation";
+import { resolveBackendFileFields, resolveBackendFileUrl } from "../utils/fileUrl";
 import { FileCheck2, Plus, Check, Eye, Settings, Save, XCircle, RotateCcw, Edit3, AlertTriangle, Send, Trash2 } from "lucide-react";
 import { formatDateIndonesian, getStatusBadgeColor, getStatusLabel } from "../utils/formatters";
 
@@ -80,6 +81,7 @@ export const IjinPage = ({
   };
   const mapIjin = (item) => ({
     ...item,
+    ...resolveBackendFileFields(item),
     id: String(item.id_ijin),
     type: "ijin",
     nomorDokumen: item.nomor_dokumen || `IJIN-${item.id_ijin}`,
@@ -92,7 +94,7 @@ export const IjinPage = ({
     tanggalMulai: item.tanggal,
     tanggalSelesai: item.tgl_selesai,
     jumlahHari: Math.max(1, Math.round((new Date(item.tgl_selesai) - new Date(item.tanggal)) / 86400000) + 1),
-    makerSignatureUrl: item.maker_signature || "",
+    makerSignatureUrl: resolveBackendFileUrl(item.maker_signature),
     jumlahHariDisetujui: item.jumlah_hari_disetujui,
     keterangan: item.keterangan || "",
     status: normalizeStatus(item),

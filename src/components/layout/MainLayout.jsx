@@ -1,10 +1,9 @@
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Navbar } from "./Navbar";
 import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
 import { NotificationDrawer } from "../common/NotificationDrawer";
 import { DataService } from "../../services/dataService";
-import { MasterDataService } from "../../services/masterDataService";
 import {
   Calendar,
   Filter,
@@ -48,6 +47,12 @@ export default function MainLayout({
   uptList,
   ultgList,
   giList,
+  projectList,
+  projectReadOnly,
+  uptReadOnly,
+  ultgReadOnly,
+  giReadOnly,
+  navbarScope,
   hasActiveFilters,
   isMobileFilterOpen,
   setIsMobileFilterOpen,
@@ -57,6 +62,10 @@ export default function MainLayout({
   setActiveTab
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const masterPaths = ["unit-kerja", "project", "jabatan", "pegawai", "umk", "faktor-upah", "hari-libur", "mutasi-pegawai", "users", "roles", "responsibilities", "unit-role", "pengaturan"];
+  const routeRoot = location.pathname.split("/").filter(Boolean)[0] || "dashboard";
+  const showGlobalFilters = !masterPaths.includes(routeRoot);
 
   const handleSelectNotification = (notifOrId) => {
     const notifObj = typeof notifOrId === "object" ? notifOrId : { submissionId: notifOrId };
@@ -116,12 +125,18 @@ export default function MainLayout({
         uptList={uptList}
         ultgList={ultgList}
         giList={giList}
+        projectList={projectList}
+        projectReadOnly={projectReadOnly}
+        uptReadOnly={uptReadOnly}
+        ultgReadOnly={ultgReadOnly}
+        giReadOnly={giReadOnly}
+        showGlobalFilters={showGlobalFilters}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
       />
 
       {/* Mobile Active Period & Filter Banner */}
-      <div className="block md:hidden sticky top-[57px] z-20 bg-white/95 backdrop-blur-md border-b border-slate-200 px-3 py-2 shadow-xs">
+      {showGlobalFilters && <div className="block md:hidden sticky top-[57px] z-20 bg-white/95 backdrop-blur-md border-b border-slate-200 px-3 py-2 shadow-xs">
         <div className="flex items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-1.5 text-slate-700 min-w-0">
             <Calendar className="w-4 h-4 text-[#075369] shrink-0" />
@@ -150,7 +165,7 @@ export default function MainLayout({
             )}
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* Main App Container */}
       <div className="flex-1 flex w-full relative">
@@ -182,14 +197,15 @@ export default function MainLayout({
               selectedUltg,
               selectedGi,
               startDate,
-              endDate
+              endDate,
+              navbarScope
             }}
           />
         </main>
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
-      <div className="block md:hidden">
+      {showGlobalFilters && <div className="block md:hidden">
         <MobileNav
           currentUser={currentUser}
           activeTab={activeTab}
@@ -216,7 +232,7 @@ export default function MainLayout({
           isMobileFilterOpen={isMobileFilterOpen}
           setIsMobileFilterOpen={setIsMobileFilterOpen}
         />
-      </div>
+      </div>}
 
       {/* Quick Submission Selection Modal for Mobile */}
       {isQuickModalOpen && (
@@ -351,7 +367,7 @@ export default function MainLayout({
       />
 
       {/* Mobile Filter Modal */}
-      {isMobileFilterOpen && (
+      {showGlobalFilters && isMobileFilterOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-0 sm:p-4">
           <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -376,10 +392,12 @@ export default function MainLayout({
                 <select
                   value={selectedProject}
                   onChange={(e) => setSelectedProject(e.target.value)}
+                  disabled={projectReadOnly}
                   className="w-full h-10 px-2.5 rounded-xl border border-slate-300 font-semibold text-slate-800 bg-slate-50 focus:bg-white"
                   >
-                  <option value="Semua Project">Semua Project</option>
-                  {(MasterDataService.getAll("m_project", { limit: 1000 })?.data || []).map((p) => (
+                  {!projectReadOnly && <option value="Semua Project">Semua Project</option>}
+                  {projectReadOnly && !projectList?.some((p) => p.nama_project === selectedProject) && <option value={selectedProject}>{selectedProject}</option>}
+                  {(projectList || []).map((p) => (
                     <option key={p.id_project} value={p.nama_project}>
                       {p.nama_project}
                     </option>
@@ -472,9 +490,10 @@ export default function MainLayout({
                       setSelectedUltg("Semua ULTG");
                       setSelectedGi("Semua GI");
                     }}
+                    disabled={uptReadOnly}
                     className="w-full h-10 px-2.5 rounded-xl border border-slate-300 font-semibold text-slate-800 bg-slate-50"
                     >
-                    <option value="Semua UPT">Semua UPT</option>
+                    {!uptReadOnly && <option value="Semua UPT">Semua UPT</option>}
                     {(uptList || []).map((u) => (
                       <option key={u} value={u}>{u}</option>
                     ))}
@@ -490,9 +509,11 @@ export default function MainLayout({
                       setSelectedUltg(val);
                       setSelectedGi("Semua GI");
                     }}
+                    disabled={ultgReadOnly}
                     className="w-full h-10 px-2.5 rounded-xl border border-slate-300 font-semibold text-slate-800 bg-slate-50"
                     >
-                    <option value="Semua ULTG">Semua ULTG</option>
+                    {!ultgReadOnly && <option value="Semua ULTG">Semua ULTG</option>}
+                    {ultgReadOnly && selectedUltg === "Semua ULTG" && <option value="Semua ULTG">Semua ULTG</option>}
                     {(ultgList || []).map((u) => (
                       <option key={u} value={u}>{u}</option>
                     ))}
@@ -504,6 +525,7 @@ export default function MainLayout({
                   <select
                     value={selectedGi}
                     onChange={(e) => setSelectedGi(e.target.value)}
+                    disabled={giReadOnly}
                     className="w-full h-10 px-2.5 rounded-xl border border-slate-300 font-semibold text-slate-800 bg-slate-50"
                     >
                     <option value="Semua GI">Semua GI</option>

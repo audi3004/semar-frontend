@@ -24,7 +24,7 @@ const UnitRolePage = ({ currentUser }) => {
   const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
-  const [form, setForm] = useState({ id_unit: "", id_role: "", is_active: "Y" });
+  const [form, setForm] = useState({ id_unit: "", id_role: "", scope_type: "SELF", is_active: "Y" });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -82,6 +82,41 @@ const UnitRolePage = ({ currentUser }) => {
   const activeAssignments = assignments.filter((item) => item.is_active === "Y");
   const canManage = ["admin", "superadmin"].includes(currentUser?.role);
 
+  const unitTree = useMemo(() => {
+    const activeUnits = units.filter((unit) => unit.is_active !== "N");
+    const ids = new Set(activeUnits.map((unit) => Number(unit.id_unit)));
+    const childrenByParent = new Map();
+    activeUnits.forEach((unit) => {
+      const parentId = unit.id_induk_unit == null ? null : Number(unit.id_induk_unit);
+      const key = ids.has(parentId) ? parentId : null;
+      if (!childrenByParent.has(key)) childrenByParent.set(key, []);
+      childrenByParent.get(key).push(unit);
+    });
+    childrenByParent.forEach((children) => children.sort((a, b) =>
+      String(a.nama_unit).localeCompare(String(b.nama_unit), "id")
+    ));
+    return { roots: childrenByParent.get(null) || [], childrenByParent };
+  }, [units]);
+
+  const effectiveUnitIds = useMemo(() => {
+    if (!form.id_unit) return new Set();
+    const selectedId = Number(form.id_unit);
+    const result = new Set([selectedId]);
+    if (form.scope_type !== "SELF_AND_DESCENDANTS") return result;
+    const queue = [selectedId];
+    while (queue.length) {
+      const current = queue.shift();
+      (unitTree.childrenByParent.get(current) || []).forEach((child) => {
+        const childId = Number(child.id_unit);
+        if (!result.has(childId)) {
+          result.add(childId);
+          queue.push(childId);
+        }
+      });
+    }
+    return result;
+  }, [form.id_unit, form.scope_type, unitTree]);
+
   const refreshAssignments = async () => {
     if (!selectedUserId) return;
     const data = await api.getUnitRolesByUser(selectedUserId);
@@ -90,13 +125,13 @@ const UnitRolePage = ({ currentUser }) => {
 
   const openCreateForm = () => {
     setEditingAssignment(null);
-    setForm({ id_unit: String(units[0]?.id_unit || ""), id_role: String(roles[0]?.id_role || ""), is_active: "Y" });
+    setForm({ id_unit: "", id_role: String(roles[0]?.id_role || ""), scope_type: "SELF", is_active: "Y" });
     setIsFormOpen(true);
   };
 
   const openEditForm = (assignment) => {
     setEditingAssignment(assignment);
-    setForm({ id_unit: String(assignment.id_unit), id_role: String(assignment.id_role), is_active: assignment.is_active || "Y" });
+    setForm({ id_unit: String(assignment.id_unit), id_role: String(assignment.id_role), scope_type: assignment.scope_type || "SELF", is_active: assignment.is_active || "Y" });
     setIsFormOpen(true);
   };
 
@@ -108,6 +143,7 @@ const UnitRolePage = ({ currentUser }) => {
         id_user: Number(selectedUserId),
         id_unit: Number(form.id_unit),
         id_role: Number(form.id_role),
+        scope_type: form.scope_type,
         is_active: form.is_active
       };
       if (editingAssignment) await api.client.put(`/unit-role/${editingAssignment.id_unit_role}`, payload);
@@ -131,6 +167,31 @@ const UnitRolePage = ({ currentUser }) => {
     } catch (error) {
       toast.error(error.response?.data?.message || "Gagal menghapus assignment Unit Role.");
     }
+  };
+
+  const renderUnitNode = (unit, depth = 0) => {
+    const id = Number(unit.id_unit);
+    const children = unitTree.childrenByParent.get(id) || [];
+    const isSelected = Number(form.id_unit) === id;
+    const isInherited = !isSelected && effectiveUnitIds.has(id);
+    return (
+      <div key={unit.id_unit}>
+        <button
+          type="button"
+          onClick={() => setForm((current) => ({ ...current, id_unit: String(unit.id_unit) }))}
+          className={`w-full flex items-center gap-2 rounded-lg py-2 pr-3 text-left transition ${isSelected ? "bg-sky-100 text-sky-900" : isInherited ? "bg-emerald-50 text-emerald-800" : "hover:bg-slate-50 text-slate-700"}`}
+          style={{ paddingLeft: `${12 + depth * 22}px` }}
+        >
+          <span className={`w-4 h-4 shrink-0 rounded border flex items-center justify-center ${effectiveUnitIds.has(id) ? "bg-sky-600 border-sky-600 text-white" : "border-slate-300 bg-white"}`}>
+            {effectiveUnitIds.has(id) && <CheckCircle2 className="w-3 h-3" />}
+          </span>
+          <Building2 className="w-3.5 h-3.5 shrink-0 opacity-70" />
+          <span className="text-xs font-bold flex-1">{unit.nama_unit}</span>
+          {isInherited && <span className="text-[9px] font-extrabold uppercase text-emerald-700">Turunan</span>}
+        </button>
+        {children.map((child) => renderUnitNode(child, depth + 1))}
+      </div>
+    );
   };
 
   if (isLoading) return <LoadingSkeleton variant="table" />;
@@ -213,7 +274,7 @@ const UnitRolePage = ({ currentUser }) => {
                 <thead><tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500"><th className="px-5 py-3">Unit</th><th className="px-5 py-3">Role pada Unit</th><th className="px-5 py-3">Level</th><th className="px-5 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Aksi</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">{assignments.map((item, index) => (
                   <tr key={item.id_unit_role} className="hover:bg-slate-50/70">
-                    <td className="px-5 py-3.5"><span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 px-2.5 py-1 font-bold"><Building2 className="w-3.5 h-3.5" />{item.unit?.nama_unit || `Unit #${item.id_unit}`}</span></td>
+                    <td className="px-5 py-3.5"><span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 px-2.5 py-1 font-bold"><Building2 className="w-3.5 h-3.5" />{item.unit?.nama_unit || `Unit #${item.id_unit}`}</span>{item.scope_type === "SELF_AND_DESCENDANTS" && <span className="block mt-1 text-[9px] font-bold text-emerald-700">Termasuk seluruh unit turunan</span>}</td>
                     <td className="px-5 py-3.5"><span className={`inline-flex rounded-full border px-2.5 py-1 font-extrabold ${roleColors[index % roleColors.length]}`}>{item.role?.nama_role || item.role?.kode_role || `Role #${item.id_role}`}</span></td>
                     <td className="px-5 py-3.5 font-mono font-bold text-slate-600">{item.role?.level_role ?? "-"}</td>
                     <td className="px-5 py-3.5 text-center">{item.is_active === "Y" ? <span className="inline-flex items-center gap-1 text-emerald-700 font-bold"><CheckCircle2 className="w-3.5 h-3.5" />Aktif</span> : <span className="text-slate-400 font-bold">Nonaktif</span>}</td>
@@ -231,11 +292,23 @@ const UnitRolePage = ({ currentUser }) => {
           <form onSubmit={submitAssignment} className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between"><div><h3 className="text-sm font-black text-slate-900">{editingAssignment ? "Edit Unit Role" : "Assign Unit Role"}</h3><p className="text-[11px] text-slate-500 mt-0.5">{identity.nama || selectedUser.username}</p></div><button type="button" onClick={() => setIsFormOpen(false)} className="p-2 rounded-lg hover:bg-slate-100"><X className="w-4 h-4" /></button></div>
             <div className="p-5 space-y-4">
-              <label className="block"><span className="block text-xs font-bold text-slate-700 mb-1.5">Unit</span><select required value={form.id_unit} onChange={(event) => setForm((current) => ({ ...current, id_unit: event.target.value }))} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-semibold"><option value="">Pilih unit</option>{units.map((unit) => <option key={unit.id_unit} value={unit.id_unit}>{unit.nama_unit}</option>)}</select></label>
               <label className="block"><span className="block text-xs font-bold text-slate-700 mb-1.5">Role pada Unit</span><select required value={form.id_role} onChange={(event) => setForm((current) => ({ ...current, id_role: event.target.value }))} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-semibold"><option value="">Pilih role approval</option>{roles.map((role) => <option key={role.id_role} value={role.id_role}>{role.nama_role}</option>)}</select></label>
+              <div>
+                <span className="block text-xs font-bold text-slate-700 mb-1.5">Pilih Unit dari Hierarchy</span>
+                <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 p-1.5 bg-white">
+                  {unitTree.roots.map((unit) => renderUnitNode(unit))}
+                  {!unitTree.roots.length && <p className="p-4 text-center text-xs text-slate-500">Data hierarchy unit tidak tersedia.</p>}
+                </div>
+              </div>
+              <fieldset disabled={!form.id_unit} className="space-y-2">
+                <legend className="text-xs font-bold text-slate-700 mb-1.5">Cakupan Assignment</legend>
+                <label className="flex gap-2.5 p-3 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50"><input type="radio" name="scope_type" value="SELF" checked={form.scope_type === "SELF"} onChange={(event) => setForm((current) => ({ ...current, scope_type: event.target.value }))} /><span><strong className="block text-xs text-slate-800">Unit ini saja</strong><small className="text-[10px] text-slate-500">Otoritas hanya berlaku pada unit yang dipilih.</small></span></label>
+                <label className="flex gap-2.5 p-3 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50"><input type="radio" name="scope_type" value="SELF_AND_DESCENDANTS" checked={form.scope_type === "SELF_AND_DESCENDANTS"} onChange={(event) => setForm((current) => ({ ...current, scope_type: event.target.value }))} /><span><strong className="block text-xs text-slate-800">Unit ini dan seluruh turunannya</strong><small className="text-[10px] text-slate-500">Unit baru di bawah parent ini otomatis ikut tercakup.</small></span></label>
+              </fieldset>
+              {form.id_unit && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[11px] font-bold text-emerald-800">Cakupan efektif: {effectiveUnitIds.size} unit</div>}
               <label className="block"><span className="block text-xs font-bold text-slate-700 mb-1.5">Status</span><select value={form.is_active} onChange={(event) => setForm((current) => ({ ...current, is_active: event.target.value }))} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-semibold"><option value="Y">Aktif</option><option value="N">Nonaktif</option></select></label>
             </div>
-            <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2"><button type="button" onClick={() => setIsFormOpen(false)} className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold">Batal</button><button disabled={isSubmitting} className="px-4 py-2 rounded-xl bg-sky-600 text-white text-xs font-extrabold disabled:opacity-60">{isSubmitting ? "Menyimpan..." : "Simpan Assignment"}</button></div>
+            <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2"><button type="button" onClick={() => setIsFormOpen(false)} className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold">Batal</button><button disabled={isSubmitting || !form.id_unit || !form.id_role} className="px-4 py-2 rounded-xl bg-sky-600 text-white text-xs font-extrabold disabled:opacity-60">{isSubmitting ? "Menyimpan..." : "Simpan Assignment"}</button></div>
           </form>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { MasterDataService } from "../services/masterDataService";
+import { api } from "../services/api";
+import { toast } from "../utils/toast";
 import { FolderKanban, Plus, Search, Edit2, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
@@ -17,9 +18,14 @@ export const ProjectPage = ({ currentUser, onRefreshData }) => {
   const [namaProject, setNamaProject] = useState("");
   const [activeStatus, setActiveStatus] = useState("Y");
 
-  const loadData = () => {
-    const res = MasterDataService.getAll("m_project", { limit: 1000 });
-    setProjects(res.data || []);
+  const loadData = async () => {
+    try {
+      const response = await api.client.get("/projects", { params: { limit: 1000 } });
+      setProjects(response.data?.data || []);
+    } catch (error) {
+      setProjects([]);
+      toast.error(error.response?.data?.message || "Gagal memuat Master Project.");
+    }
   };
 
   useEffect(() => {
@@ -45,54 +51,44 @@ export const ProjectPage = ({ currentUser, onRefreshData }) => {
   const handleOpenEdit = (item) => {
     setEditingItem(item);
     setNamaProject(item.nama_project || "");
-    setActiveStatus(item.active || "Y");
+    setActiveStatus(item.is_active || "Y");
     setFormError("");
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!namaProject || namaProject.trim().length < 3) {
       setFormError("Nama Project minimal 3 karakter.");
       return;
     }
 
-    const newId = editingItem
-      ? editingItem.id_project
-      : projects.length > 0
-      ? Math.max(...projects.map((p) => Number(p.id_project) || 0)) + 1
-      : 1;
-
     const payload = {
-      id_project: Number(newId),
       nama_project: namaProject.trim(),
-      active: activeStatus
+      is_active: activeStatus
     };
 
-    let result;
-    if (editingItem) {
-      result = MasterDataService.update("m_project", editingItem.id_project, payload);
-    } else {
-      result = MasterDataService.create("m_project", payload);
-    }
-
-    if (result.success) {
+    try {
+      if (editingItem) await api.client.put(`/projects/${editingItem.id_project}`, payload);
+      else await api.client.post("/projects", payload);
       setIsModalOpen(false);
-      loadData();
+      await loadData();
       if (onRefreshData) onRefreshData();
-    } else {
-      setFormError(result.error || "Gagal menyimpan data project.");
+      toast.success(`Project berhasil ${editingItem ? "diperbarui" : "ditambahkan"}.`);
+    } catch (error) {
+      setFormError(error.response?.data?.message || "Gagal menyimpan data project.");
     }
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (confirm("Apakah Anda yakin ingin menghapus Project ini?")) {
-      const res = MasterDataService.delete("m_project", id);
-      if (res.success) {
-        loadData();
+      try {
+        await api.client.delete(`/projects/${id}`);
+        await loadData();
         if (onRefreshData) onRefreshData();
-      } else {
-        alert(res.error);
+        toast.success("Project berhasil dihapus.");
+      } catch (error) {
+        toast.error(error.response?.data?.message || "Project masih digunakan dan tidak dapat dihapus.");
       }
     }
   };
@@ -159,12 +155,12 @@ export const ProjectPage = ({ currentUser, onRefreshData }) => {
                     <td className="p-3.5">
                       <span
                         className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border ${
-                          item.active !== "N"
+                          item.is_active !== "N"
                             ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                             : "bg-rose-50 text-rose-800 border-rose-200"
                         }`}
                       >
-                        {item.active !== "N" ? "Aktif" : "Non-Aktif"}
+                        {item.is_active !== "N" ? "Aktif" : "Non-Aktif"}
                       </span>
                     </td>
                     <td className="p-3.5 pr-5 text-center">

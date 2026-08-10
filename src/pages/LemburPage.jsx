@@ -16,6 +16,7 @@ import {
    getWeekRange,
 } from "../utils/submissionValidation";
 import { compressImageDataUrl } from "../utils/imageCompressor";
+import { resolveBackendFileFields, resolveBackendFileUrl } from "../utils/fileUrl";
 import {
    Clock,
    Plus,
@@ -44,12 +45,7 @@ import {
    getStatusLabel,
 } from "../utils/formatters";
 import { DistributionPieChart } from "../components/charts/DistributionPieChart";
-const API_ORIGIN = import.meta.env.VITE_API_BASE_URL;
 const CATEGORY_SEPARATOR = "|||";
-const resolveFileUrl = (value) =>
-   value && !String(value).startsWith("http")
-      ? `${API_ORIGIN}${value}`
-      : value || "";
 const dataUrlToFile = (dataUrl, filename) => {
    const [header, encoded] = dataUrl.split(",");
    const mime = header.match(/data:([^;]+)/)?.[1] || "image/png";
@@ -139,6 +135,7 @@ const mapApiLembur = (item) => {
    const statusCode = item.status?.kode_status || "DRAFT";
    return {
       ...item,
+      ...resolveBackendFileFields(item),
       id: String(item.id_lembur),
       type: "lembur",
       nomorDokumen:
@@ -156,24 +153,20 @@ const mapApiLembur = (item) => {
       jamMulai: String(item.jam_mulai || "").slice(0, 5),
       jamSelesai: String(item.jam_selesai || "").slice(0, 5),
       durasiJam: Number(item.total_jam || 0),
+      biayaLembur: Number(item.biaya_lembur || 0),
+      estimasiBiayaRupiah: Number(item.biaya_lembur || 0),
       ...category,
       areaGroup: item.area_group || "",
       isHariLibur: item.is_hari_libur === "Y",
       kegiatanDetail: item.detail_pekerjaan_lembur || "",
       petugasPendampingNip: item.petugasCuti?.nip || "",
       petugasPendampingNama: item.petugasCuti?.nama || "",
-      fotoDokumentasi1Url: resolveFileUrl(item.foto_kegiatan_1),
-      fotoDokumentasi2Url: resolveFileUrl(item.foto_kegiatan_2),
-      dasarPerintahLemburUrl: resolveFileUrl(item.surat_perintah_lembur),
+      fotoDokumentasi1Url: resolveBackendFileUrl(item.foto_kegiatan_1),
+      fotoDokumentasi2Url: resolveBackendFileUrl(item.foto_kegiatan_2),
+      dasarPerintahLemburUrl: resolveBackendFileUrl(item.surat_perintah_lembur),
       dasarPerintahLemburName: String(item.surat_perintah_lembur || "")
          .split("/")
          .pop(),
-      makerSignatureUrl: resolveFileUrl(item.maker_signature),
-      checkerSignatureUrl: resolveFileUrl(item.checker_signature),
-      verificationSignatureUrl: resolveFileUrl(item.verification_signature),
-      approval1SignatureUrl: resolveFileUrl(item.approval_1_signature),
-      approval2SignatureUrl: resolveFileUrl(item.approval_2_signature),
-      approval3SignatureUrl: resolveFileUrl(item.approval_3_signature),
       jumlahJamKoreksi:
          item.jumlah_jam_koreksi == null
             ? null
@@ -259,6 +252,8 @@ export const LemburPage = ({
    const [suratPerintahFile, setSuratPerintahFile] = useState(null);
    const [apiLembur, setApiLembur] = useState([]);
    const [apiOfficers, setApiOfficers] = useState([]);
+   const [replacementCandidates, setReplacementCandidates] = useState([]);
+   const [isLoadingReplacementCandidates, setIsLoadingReplacementCandidates] = useState(false);
    const [isSignModalOpen, setIsSignModalOpen] = useState(false);
    const [editingSub, setEditingSub] = useState(null);
    const [alertModal, setAlertModal] = useState({
@@ -369,8 +364,15 @@ export const LemburPage = ({
       jenisPekerjaan === "Pengganti Piket (Operator sedang cuti)";
    const isSiagaLibur = jenisPekerjaan === "Siaga / Libur Nasional";
 
-   // Task 2: Filter Pendamping / Rekan Lembur by same Gardu Induk as applicant & status TAD if Operator Cuti
-   const filteredOfficers = allOfficers.filter((u) => {
+   const filteredOfficers = replacementCandidates
+      .filter((item) => item.is_active !== "N" && item.nip !== currentUser?.nip)
+      .map((item) => ({
+         ...item,
+         name: item.nama,
+         garduInduk: item.unit?.nama_unit,
+         jabatan: item.jabatan?.nama_jabatan || "Petugas",
+      }))
+      .filter((u) => {
       if (isOperatorCuti) {
          const currentUnitId =
             currentUser?.id_unit ||
@@ -382,41 +384,45 @@ export const LemburPage = ({
               currentUser.garduInduk === "Semua GI" ||
               u.garduInduk === currentUser.garduInduk;
 
-         const isTad =
-            u.status === "TAD" ||
-            u.employeeType === "TAD" ||
-            u.role === "maker" ||
-            u.role === "MAKER" ||
-            (u.jabatan &&
-               (u.jabatan.toLowerCase().includes("operator") ||
-                  u.jabatan.toLowerCase().includes("teknisi") ||
-                  u.jabatan.toLowerCase().includes("tad")));
-
-         return matchGI && isTad;
+         return matchGI;
       }
       return true;
    });
 
-   // Task 3: Helper to check officer leave/permission/sick status on target date
-   const getOfficerLeaveStatus = (nip, targetDate) => {
-      if (!nip || !submissions || !Array.isArray(submissions)) return null;
-      const activeLeave = submissions.find((s) => {
-         if (s.employeeNip !== nip) return false;
-         const sLower = s.status ? s.status.toLowerCase() : "";
-         if (sLower === "rejected" || sLower === "cancelled") return false;
-         if (s.type === "cuti" || s.type === "ijin" || s.type === "sakit") {
-            const start =
-               s.tanggalMulai || s.tanggalPengajuan || s.tanggalLembur;
-            const end = s.tanggalSelesai || start;
-            if (targetDate && start && end) {
-               return targetDate >= start && targetDate <= end;
+   useEffect(() => {
+      let active = true;
+      if (!isOperatorCuti || !tanggalLembur) {
+         setReplacementCandidates([]);
+         return undefined;
+      }
+
+      setIsLoadingReplacementCandidates(true);
+      setPetugasPendampingError("");
+      api.getPetugasBerhalangan(tanggalLembur)
+         .then((rows) => {
+            if (!active) return;
+            const candidates = Array.isArray(rows) ? rows : [];
+            setReplacementCandidates(candidates);
+            setPetugasPendampingNip((selectedNip) =>
+               selectedNip && !candidates.some((item) => item.nip === selectedNip)
+                  ? ""
+                  : selectedNip
+            );
+         })
+         .catch((error) => {
+            if (active) {
+               setReplacementCandidates([]);
+               setPetugasPendampingError(
+                  error.response?.data?.message || "Gagal memuat petugas yang sedang cuti, ijin, atau sakit."
+               );
             }
-            return true;
-         }
-         return false;
-      });
-      return activeLeave ? activeLeave.type : null;
-   };
+         })
+         .finally(() => {
+            if (active) setIsLoadingReplacementCandidates(false);
+         });
+
+      return () => { active = false; };
+   }, [isOperatorCuti, tanggalLembur]);
 
    // Task 4: Auto-check isHariLibur when jenisPekerjaan === "Siaga / Libur Nasional" and tanggalLembur matches master holiday
    useEffect(() => {
@@ -2412,22 +2418,16 @@ export const LemburPage = ({
                               }`}
                            >
                               <option value="">
-                                 {isPetugasPendampingRequired
-                                    ? `-- Pilih Petugas Pendamping (Wajib - Unit GI: ${currentUser?.garduInduk || "Sama"}, Status: TAD) --`
+                                 {isLoadingReplacementCandidates
+                                    ? "Memuat petugas yang berhalangan..."
+                                    : isPetugasPendampingRequired
+                                    ? `-- Pilih Petugas yang Digantikan (Cuti/Ijin/Sakit) --`
                                     : "-- Pilih Petugas Pendamping (Opsional) --"}
                               </option>
                               {filteredOfficers.map((u) => {
-                                 const leaveStatus = getOfficerLeaveStatus(
-                                    u.nip,
-                                    tanggalLembur,
-                                 );
-                                 let statusBadge = "";
-                                 if (leaveStatus === "cuti")
-                                    statusBadge = "🟨 [CUTI] ";
-                                 if (leaveStatus === "ijin")
-                                    statusBadge = "🟦 [IJIN] ";
-                                 if (leaveStatus === "sakit")
-                                    statusBadge = "🟥 [SAKIT] ";
+                                 const statusBadge = u.alasan_ketidakhadiran
+                                    ?.map((reason) => `[${reason.jenis}]`)
+                                    .join(" ") || "";
 
                                  return (
                                     <option key={u.nip} value={u.nip}>
@@ -2438,6 +2438,11 @@ export const LemburPage = ({
                                  );
                               })}
                            </select>
+                           {!isLoadingReplacementCandidates && tanggalLembur && filteredOfficers.length === 0 && (
+                              <p className="mt-1.5 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-800">
+                                 Tidak ada petugas pada unit ini yang memiliki pengajuan cuti, ijin, atau sakit aktif pada {formatDateIndonesian(tanggalLembur)}.
+                              </p>
+                           )}
 
                            {/* Task 1: Color Legend for Petugas Status (Hanya CUTI, IJIN, SAKIT) */}
                            <div className="mt-2.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">

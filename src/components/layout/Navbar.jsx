@@ -35,6 +35,12 @@ export const Navbar = ({
   uptList = ["UPT Semarang", "UPT Purwokerto", "UPT Surakarta"],
   ultgList = ["ULTG Semarang", "ULTG Salatiga", "ULTG Kudus", "ULTG Purwokerto"],
   giList = ["GI Krapyak", "GI Ungaran", "GI Tuntang", "GI Kalisari", "GI Tambakakrik"],
+  projectList: scopedProjectList,
+  projectReadOnly = true,
+  uptReadOnly = true,
+  ultgReadOnly = true,
+  giReadOnly = true,
+  showGlobalFilters = true,
   activeTab = "dashboard",
   setActiveTab = (_v) => {}
 }) => {
@@ -46,7 +52,7 @@ export const Navbar = ({
     return currentUser ? DataService.getNotifications(currentUser.nip) : [];
   }, [currentUser, showNotifMenu]);
 
-  const projectList = React.useMemo(() => {
+  const localProjectList = React.useMemo(() => {
     try {
       return MasterDataService.getAll("m_project", { limit: 1000 })?.data || [];
     } catch (e) {
@@ -54,6 +60,7 @@ export const Navbar = ({
       return [];
     }
   }, []);
+  const projectList = scopedProjectList || localProjectList;
 
   const [isChangePassOpen, setIsChangePassOpen] = useState(false);
   const [oldPassword, setOldPassword] = useState("");
@@ -285,7 +292,7 @@ export const Navbar = ({
       </div>
 
       {/* Bottom Section: Seksi Filter Desktop */}
-      <div className="hidden md:block w-full mt-3 pt-2.5 border-t border-slate-200/60 relative z-0">
+      {showGlobalFilters && <div className="hidden md:block w-full mt-3 pt-2.5 border-t border-slate-200/60 relative z-0">
 
         <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 lg:gap-4 text-xs bg-gradient-to-r from-slate-100/90 to-sky-50/70 p-1.5 md:p-2 rounded-2xl md:rounded-full border border-slate-200/70 shadow-inner">
           
@@ -300,9 +307,11 @@ export const Navbar = ({
             <select
               value={selectedProject}
               onChange={(e) => setSelectedProject(e.target.value)}
-              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer text-xs"
+              disabled={projectReadOnly}
+              className="bg-transparent font-bold text-slate-800 focus:outline-none disabled:cursor-not-allowed disabled:text-slate-600 cursor-pointer text-xs"
             >
-              <option value="Semua Project">Semua Project</option>
+              {!projectReadOnly && <option value="Semua Project">Semua Project</option>}
+              {projectReadOnly && !projectList.some((p) => p.nama_project === selectedProject) && <option value={selectedProject}>{selectedProject}</option>}
               {(projectList || []).map((p) => (
                 <option key={p.id_project} value={p.nama_project}>
                   {p.nama_project}
@@ -327,9 +336,10 @@ export const Navbar = ({
                 setSelectedUltg("Semua ULTG");
                 setSelectedGi("Semua GI");
               }}
-              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer text-xs"
+              disabled={uptReadOnly}
+              className="bg-transparent font-bold text-slate-800 focus:outline-none disabled:cursor-not-allowed cursor-pointer text-xs"
             >
-              <option value="Semua UPT">Semua UPT</option>
+              {!uptReadOnly && <option value="Semua UPT">Semua UPT</option>}
               {(uptList || []).map((u) => (
                 <option key={u} value={u}>
                   {u}
@@ -347,9 +357,11 @@ export const Navbar = ({
                 setSelectedUltg(val);
                 setSelectedGi("Semua GI");
               }}
-              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer text-xs"
+              disabled={ultgReadOnly}
+              className="bg-transparent font-bold text-slate-800 focus:outline-none disabled:cursor-not-allowed cursor-pointer text-xs"
             >
-              <option value="Semua ULTG">Semua ULTG</option>
+              {!ultgReadOnly && <option value="Semua ULTG">Semua ULTG</option>}
+              {ultgReadOnly && selectedUltg === "Semua ULTG" && <option value="Semua ULTG">Semua ULTG</option>}
               {(ultgList || []).map((u) => (
                 <option key={u} value={u}>
                   {u}
@@ -363,7 +375,8 @@ export const Navbar = ({
             <select
               value={selectedGi}
               onChange={(e) => setSelectedGi(e.target.value)}
-              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer text-xs"
+              disabled={giReadOnly}
+              className="bg-transparent font-bold text-slate-800 focus:outline-none disabled:cursor-not-allowed cursor-pointer text-xs"
             >
               <option value="Semua GI">Semua GI</option>
               {(giList || []).map((g) => (
@@ -416,7 +429,7 @@ export const Navbar = ({
           </div>
 
         </div>
-      </div>
+      </div>}
 
       {/* Modal Ubah Password Mandiri */}
       {isChangePassOpen && createPortal(

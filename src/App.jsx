@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavig
 import { AuthService } from "./services/authService";
 import { DataService } from "./services/dataService";
 import { MasterDataService } from "./services/masterDataService";
+import { api } from "./services/api";
 import { ResponsibilityService } from "./services/responsibilityService";
 import { ShieldAlert } from "lucide-react";
 import { LoginPage } from "./pages/LoginPage";
@@ -93,6 +94,7 @@ function AppContent() {
   const [selectedUpt, setSelectedUpt] = useState("Semua UPT");
   const [selectedUltg, setSelectedUltg] = useState("Semua ULTG");
   const [selectedGi, setSelectedGi] = useState("Semua GI");
+  const [filterMasterData, setFilterMasterData] = useState({ units: [], projects: [], jabatans: [] });
 
   // Helper to get first and last day of current month as default
   const getFirstAndLastDayOfCurrentMonth = () => {
@@ -236,32 +238,23 @@ function AppContent() {
     };
   }, [currentUser, navigate]);
 
-  // Sync Unit filters with logged in user / selected role
   useEffect(() => {
-    if (currentUser) {
-      if (currentUser.role === "superadmin" || currentUser.role === "approved3" || currentUser.role === "admin") {
-        setSelectedUpt("Semua UPT");
-        setSelectedUltg("Semua ULTG");
-        setSelectedGi("Semua GI");
-      } else if (
-        currentUser.role === "approved2" ||
-        currentUser.role === "approved1" ||
-        currentUser.role === "verification"
-      ) {
-        setSelectedUpt(currentUser.unitUpt || "Semua UPT");
-        setSelectedUltg("Semua ULTG");
-        setSelectedGi("Semua GI");
-      } else if (currentUser.role === "checker") {
-        setSelectedUpt(currentUser.unitUpt || "Semua UPT");
-        setSelectedUltg(currentUser.unitUltg || "Semua ULTG");
-        setSelectedGi(currentUser.garduInduk || "Semua GI");
-      } else {
-        setSelectedUpt(currentUser.unitUpt || "Semua UPT");
-        setSelectedUltg(currentUser.unitUltg || "Semua ULTG");
-        setSelectedGi(currentUser.garduInduk || "Semua GI");
-      }
-    }
-  }, [currentUser?.nip, currentUser?.role]);
+    if (!currentUser) return;
+    let active = true;
+    Promise.all([
+      api.client.get("/unit", { params: { limit: 1000 } }),
+      api.client.get("/projects", { params: { limit: 1000 } }),
+      api.client.get("/jabatan", { params: { limit: 1000 } })
+    ]).then(([unitResponse, projectResponse, jabatanResponse]) => {
+      if (!active) return;
+      setFilterMasterData({
+        units: unitResponse.data?.data || [],
+        projects: projectResponse.data?.data || [],
+        jabatans: jabatanResponse.data?.data || []
+      });
+    }).catch((error) => console.error("Gagal memuat scope filter Navbar:", error));
+    return () => { active = false; };
+  }, [currentUser?.id_user, currentUser?.nip]);
 
   // Sync activeTab with pathname for visual feedback in Sidebar/MobileNav
   useEffect(() => {
@@ -294,12 +287,13 @@ function AppContent() {
   }, []);
 
   const masterUnits = useMemo(() => {
+    if (filterMasterData.units.length) return filterMasterData.units;
     try {
       return MasterDataService.getAll("m_unit", { limit: 1000 })?.data || [];
     } catch {
       return [];
     }
-  }, []);
+  }, [filterMasterData.units]);
   
   const masterJabatans = useMemo(() => {
     try {
@@ -307,15 +301,96 @@ function AppContent() {
     } catch {
       return [];
     }
-  }, []);
+  }, [filterMasterData.jabatans]);
 
   const masterProjects = useMemo(() => {
+    if (filterMasterData.projects.length) return filterMasterData.projects;
     try {
       return MasterDataService.getAll("m_project", { limit: 1000 })?.data || [];
     } catch {
       return [];
     }
-  }, []);
+  }, [filterMasterData.projects]);
+
+  const navbarScope = useMemo(() => {
+    const person = currentUser?.petugas || currentUser?.pegawai || {};
+    const isAdministrator = ["admin", "superadmin"].includes(currentUser?.role);
+    const unitById = new Map(masterUnits.map((unit) => [Number(unit.id_unit), unit]));
+    const childrenByParent = new Map();
+    masterUnits.forEach((unit) => {
+      const parentId = unit.id_induk_unit == null ? null : Number(unit.id_induk_unit);
+      if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+      childrenByParent.get(parentId).push(unit);
+    });
+    const collectDescendants = (rootId) => {
+      const result = [];
+      const queue = [Number(rootId)];
+      const visited = new Set();
+      while (queue.length) {
+        const id = queue.shift();
+        if (visited.has(id)) continue;
+        visited.add(id);
+        const unit = unitById.get(id);
+        if (unit) result.push(unit);
+        (childrenByParent.get(id) || []).forEach((child) => queue.push(Number(child.id_unit)));
+      }
+      return result;
+    };
+
+    const ownUnitId = Number(person.id_unit || person.unit?.id_unit || currentUser?.id_unit || 0);
+    const ownUnit = unitById.get(ownUnitId) || person.unit;
+    const path = [];
+    let cursor = ownUnit;
+    const visited = new Set();
+    while (cursor && !visited.has(Number(cursor.id_unit))) {
+      visited.add(Number(cursor.id_unit));
+      path.push(cursor);
+      cursor = unitById.get(Number(cursor.id_induk_unit));
+    }
+    const findPath = (pattern) => path.find((unit) => pattern.test(String(unit.nama_unit || "")));
+    const upt = findPath(/\bUPT\b|UNIT PELAKSANA|^UP\s/i) || path[path.length - 1] || ownUnit;
+    const ultg = findPath(/\bULTG\b/i);
+    const gi = findPath(/\bGI\b|GARDU INDUK/i);
+    const ownChildren = ownUnitId ? collectDescendants(ownUnitId) : [];
+    const giOptions = (ultg ? collectDescendants(ultg.id_unit) : ownChildren)
+      .filter((unit) => /\bGI\b|GARDU INDUK/i.test(String(unit.nama_unit || "")))
+      .map((unit) => unit.nama_unit);
+
+    const jabatanId = Number(person.id_jabatan || person.jabatan?.id_jabatan || 0);
+    const jabatan = person.jabatan || masterJabatans.find((item) => Number(item.id_jabatan) === jabatanId);
+    const projectId = Number(jabatan?.id_project || currentUser?.id_project || 0);
+    const allowedProjectIds = isAdministrator
+      ? masterProjects.map((project) => Number(project.id_project))
+      : projectId === 1
+        ? [1, 2].filter((id) => masterProjects.some((project) => Number(project.id_project) === id))
+        : [projectId].filter(Boolean);
+    const projectNames = masterProjects
+      .filter((project) => allowedProjectIds.includes(Number(project.id_project)))
+      .map((project) => project.nama_project);
+
+    return {
+      isAdministrator,
+      projectId,
+      allowedProjectIds,
+      projectLabel: isAdministrator ? "Semua Project" : (projectId === 1 ? projectNames.join(" & ") : (projectNames[0] || "Project tidak ditemukan")),
+      uptName: isAdministrator ? "Semua UPT" : (upt?.nama_unit || currentUser?.unitUpt || "Semua UPT"),
+      ultgName: isAdministrator ? "Semua ULTG" : (ultg?.nama_unit || "Semua ULTG"),
+      giName: isAdministrator ? "Semua GI" : (gi?.nama_unit || "Semua GI"),
+      uptList: isAdministrator ? masterUnits.filter((u) => /\bUPT\b|UNIT PELAKSANA|^UP\s/i.test(u.nama_unit)).map((u) => u.nama_unit) : [upt?.nama_unit].filter(Boolean),
+      ultgList: isAdministrator ? masterUnits.filter((u) => /\bULTG\b/i.test(u.nama_unit)).map((u) => u.nama_unit) : [ultg?.nama_unit].filter(Boolean),
+      giList: isAdministrator ? masterUnits.filter((u) => /\bGI\b|GARDU INDUK/i.test(u.nama_unit)).map((u) => u.nama_unit) : Array.from(new Set(giOptions)),
+      canSelectGi: isAdministrator || Boolean(ownUnit && /\bULTG\b/i.test(String(ownUnit.nama_unit || ""))),
+      allowedUnitIds: isAdministrator ? masterUnits.map((unit) => Number(unit.id_unit)) : ownChildren.map((unit) => Number(unit.id_unit)),
+    };
+  }, [currentUser, masterUnits, masterJabatans, masterProjects]);
+
+  useEffect(() => {
+    if (!currentUser || !masterUnits.length) return;
+    setSelectedProject(navbarScope.projectLabel);
+    setSelectedUpt(navbarScope.uptName);
+    setSelectedUltg(navbarScope.ultgName);
+    setSelectedGi(navbarScope.canSelectGi ? "Semua GI" : navbarScope.giName);
+  }, [currentUser?.nip, currentUser?.role, masterUnits.length, navbarScope.projectLabel, navbarScope.uptName, navbarScope.ultgName, navbarScope.giName, navbarScope.canSelectGi]);
 
   const uptList = useMemo(() => {
     const fromMaster = masterUnits.map((u) => u.upt);
@@ -446,29 +521,23 @@ function AppContent() {
 
   const filteredSubmissions = useMemo(() => {
     return submissions.filter((sub) => {
-      // 1. Logged in Approver multiProject limits (Role approved2 & approved3)
-      if (currentUser?.role === "approved2" || currentUser?.role === "approved3") {
-        if (currentUser?.multiProject && Array.isArray(currentUser.multiProject)) {
-          const subProjId = getProjectIdForSubmission(sub, allUsers, masterJabatans);
-          if (!currentUser.multiProject.includes(String(subProjId))) {
-            return false;
-          }
-        }
-      }
-
-      // 2. Global "Pilih Project" filter
-      if (selectedProject && selectedProject !== "Semua Project") {
-        const subProject = getProjectNameForSubmission(sub, allUsers, masterJabatans, masterProjects);
-        if (subProject !== selectedProject) return false;
+      // Project selalu mengikuti project user. Project ID 1 mendapat cakupan kedua project.
+      if (!navbarScope.isAdministrator && navbarScope.allowedProjectIds.length) {
+        const subProjectId = Number(getProjectIdForSubmission(sub, allUsers, masterJabatans));
+        if (!navbarScope.allowedProjectIds.includes(subProjectId)) return false;
       }
 
       // 3. Global unit filters
       const emp = (allUsers || []).find((u) => u.nip === sub.employeeNip);
-      if (selectedUpt && selectedUpt !== "Semua UPT") {
+      const submissionUnitId = Number(sub.id_unit || emp?.id_unit || emp?.petugas?.id_unit || 0);
+      if (!navbarScope.isAdministrator && submissionUnitId && navbarScope.allowedUnitIds.length && !navbarScope.allowedUnitIds.includes(submissionUnitId)) {
+        return false;
+      }
+      if (navbarScope.isAdministrator && selectedUpt && selectedUpt !== "Semua UPT") {
         const subUpt = sub.unitUpt || sub.upt || emp?.unitUpt;
         if (subUpt && subUpt !== selectedUpt) return false;
       }
-      if (selectedUltg && selectedUltg !== "Semua ULTG") {
+      if (navbarScope.isAdministrator && selectedUltg && selectedUltg !== "Semua ULTG") {
         const subUltg = sub.unitUltg || sub.ultg || emp?.unitUltg;
         if (subUltg && subUltg !== selectedUltg) return false;
       }
@@ -498,14 +567,15 @@ function AppContent() {
     masterJabatans,
     masterProjects,
     getProjectIdForSubmission,
-    getProjectNameForSubmission
+    getProjectNameForSubmission,
+    navbarScope
   ]);
 
   const handleResetFilters = () => {
-    setSelectedProject("Semua Project");
-    setSelectedUpt("Semua UPT");
-    setSelectedUltg("Semua ULTG");
-    setSelectedGi("Semua GI");
+    setSelectedProject(navbarScope.projectLabel);
+    setSelectedUpt(navbarScope.uptName);
+    setSelectedUltg(navbarScope.ultgName);
+    setSelectedGi(navbarScope.canSelectGi ? "Semua GI" : navbarScope.giName);
     const defaultDates = getFirstAndLastDayOfCurrentMonth();
     setStartDate(defaultDates.startDate);
     setEndDate(defaultDates.endDate);
@@ -655,9 +725,15 @@ function AppContent() {
             endDate={endDate}
             setEndDate={setEndDate}
             onResetFilters={handleResetFilters}
-            uptList={uptList}
-            ultgList={ultgList}
-            giList={giList}
+            uptList={navbarScope.uptList}
+            ultgList={navbarScope.ultgList}
+            giList={navbarScope.giList}
+            projectList={masterProjects}
+            projectReadOnly={!navbarScope.isAdministrator}
+            uptReadOnly={!navbarScope.isAdministrator}
+            ultgReadOnly={!navbarScope.isAdministrator}
+            giReadOnly={!navbarScope.canSelectGi}
+            navbarScope={navbarScope}
             hasActiveFilters={hasActiveFilters}
             isMobileFilterOpen={isMobileFilterOpen}
             setIsMobileFilterOpen={setIsMobileFilterOpen}
@@ -775,7 +851,7 @@ function AppContent() {
               <ListDokumenPage
                 currentUser={currentUser}
                 submissions={filteredSubmissions}
-                selectedProject={selectedProject}
+                selectedProject="Semua Project"
                 selectedUpt={selectedUpt}
                 selectedUltg={selectedUltg}
                 selectedGi={selectedGi}

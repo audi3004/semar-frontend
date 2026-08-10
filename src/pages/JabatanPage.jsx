@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { MasterDataService } from "../services/masterDataService";
+import { api } from "../services/api";
+import { toast } from "../utils/toast";
 import { Award, Plus, Search, Edit2, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
@@ -20,13 +21,20 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
   const [idProject, setIdProject] = useState(1);
   const [activeStatus, setActiveStatus] = useState("Y");
 
-  const loadData = () => {
-    const resJabatan = MasterDataService.getAll("m_jabatan", { limit: 1000 });
-    const resProject = MasterDataService.getAll("m_project", { limit: 1000 });
-    setJabatans(resJabatan.data || []);
-    setProjects(resProject.data || []);
-    if (resProject.data && resProject.data.length > 0) {
-      setIdProject(resProject.data[0].id_project);
+  const loadData = async () => {
+    try {
+      const [jabatanResponse, projectResponse] = await Promise.all([
+        api.client.get("/jabatan", { params: { limit: 1000 } }),
+        api.client.get("/projects", { params: { limit: 1000 } })
+      ]);
+      const jabatanRows = jabatanResponse.data?.data || [];
+      const projectRows = projectResponse.data?.data || [];
+      setJabatans(jabatanRows);
+      setProjects(projectRows);
+      if (projectRows.length > 0) setIdProject(projectRows[0].id_project);
+    } catch (error) {
+      setJabatans([]); setProjects([]);
+      toast.error(error.response?.data?.message || "Gagal memuat Master Jabatan.");
     }
   };
 
@@ -64,12 +72,12 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
     setEditingItem(item);
     setNamaJabatan(item.nama_jabatan || "");
     setIdProject(item.id_project || 1);
-    setActiveStatus(item.active || "Y");
+    setActiveStatus(item.is_active || "Y");
     setFormError("");
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!namaJabatan || namaJabatan.trim().length < 3) {
       setFormError("Nama Jabatan minimal 3 karakter.");
@@ -80,43 +88,33 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
       return;
     }
 
-    const newId = editingItem
-      ? editingItem.id_jabatan
-      : jabatans.length > 0
-      ? Math.max(...jabatans.map((j) => Number(j.id_jabatan) || 0)) + 1
-      : 1;
-
     const payload = {
-      id_jabatan: Number(newId),
       nama_jabatan: namaJabatan.trim(),
       id_project: Number(idProject),
-      active: activeStatus
+      is_active: activeStatus
     };
 
-    let result;
-    if (editingItem) {
-      result = MasterDataService.update("m_jabatan", editingItem.id_jabatan, payload);
-    } else {
-      result = MasterDataService.create("m_jabatan", payload);
-    }
-
-    if (result.success) {
+    try {
+      if (editingItem) await api.client.put(`/jabatan/${editingItem.id_jabatan}`, payload);
+      else await api.client.post("/jabatan", payload);
       setIsModalOpen(false);
-      loadData();
+      await loadData();
       if (onRefreshData) onRefreshData();
-    } else {
-      setFormError(result.error || "Gagal menyimpan data jabatan.");
+      toast.success(`Jabatan berhasil ${editingItem ? "diperbarui" : "ditambahkan"}.`);
+    } catch (error) {
+      setFormError(error.response?.data?.message || "Gagal menyimpan data jabatan.");
     }
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (confirm("Apakah Anda yakin ingin menghapus Jabatan ini?")) {
-      const res = MasterDataService.delete("m_jabatan", id);
-      if (res.success) {
-        loadData();
+      try {
+        await api.client.delete(`/jabatan/${id}`);
+        await loadData();
         if (onRefreshData) onRefreshData();
-      } else {
-        alert(res.error);
+        toast.success("Jabatan berhasil dihapus.");
+      } catch (error) {
+        toast.error(error.response?.data?.message || "Jabatan masih digunakan dan tidak dapat dihapus.");
       }
     }
   };
@@ -189,12 +187,12 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
                     <td className="p-3.5">
                       <span
                         className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border ${
-                          item.active !== "N"
+                          item.is_active !== "N"
                             ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                             : "bg-rose-50 text-rose-800 border-rose-200"
                         }`}
                       >
-                        {item.active !== "N" ? "Aktif" : "Non-Aktif"}
+                        {item.is_active !== "N" ? "Aktif" : "Non-Aktif"}
                       </span>
                     </td>
                     <td className="p-3.5 pr-5 text-center">

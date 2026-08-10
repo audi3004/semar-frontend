@@ -63,7 +63,6 @@ import {
   getStatusBadgeColor,
   getStatusLabel,
   getFormattedDocNo,
-  calculateOvertimeCost,
   formatRupiah
 } from "../utils/formatters";
 import { validateLemburMaxHours } from "../utils/submissionValidation";
@@ -146,6 +145,13 @@ const buildApprovalPayload = (dataUrl, role, extra = {}) => {
 
 const getApiError = (error) =>
   error?.response?.data?.message || error?.message || "Terjadi kesalahan saat memproses workflow.";
+
+const calculateCorrectedOvertimeCost = (submission, correctedHours) => {
+  const effectiveHours = Number(submission.jumlahJamKoreksi ?? submission.durasiJam ?? 0);
+  const storedCost = Number(submission.biayaLembur ?? submission.estimasiBiayaRupiah ?? 0);
+  if (effectiveHours <= 0 || storedCost <= 0) return 0;
+  return (storedCost / effectiveHours) * Number(correctedHours || 0);
+};
 
 const mapCheckerEditPayload = (type, data) => {
   if (type === "lembur") return {
@@ -267,6 +273,7 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
   const selectedGi = context.selectedGi || "Semua GI";
   const startDate = context.startDate;
   const endDate = context.endDate;
+  const navbarScope = context.navbarScope || {};
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -683,28 +690,36 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
     }
 
     // 2. Global "Pilih Project" filter from header
-    if (!usesBackendApprovalScope && selectedProject && selectedProject !== "Semua Project") {
+    if (!navbarScope.isAdministrator && navbarScope.allowedProjectIds?.length) {
+      const subProjectId = Number(getProjectIdForSubmission(sub, allUsers, masterJabatans));
+      if (!navbarScope.allowedProjectIds.includes(subProjectId)) return false;
+    } else if (!navbarScope.allowedProjectIds && selectedProject && selectedProject !== "Semua Project") {
       const subProject = getProjectNameForSubmission(sub, allUsers, masterJabatans, masterProjects);
       if (subProject !== selectedProject) return false;
     }
 
     // 3. Global unit filters from header
     const emp = (allUsers || []).find((u) => u.nip === sub.employeeNip);
-    if (!usesBackendApprovalScope && selectedUpt && selectedUpt !== "Semua UPT") {
+    const submissionUnitId = Number(sub.id_unit || emp?.id_unit || emp?.petugas?.id_unit || 0);
+    if (!navbarScope.isAdministrator && submissionUnitId && navbarScope.allowedUnitIds?.length && !navbarScope.allowedUnitIds.includes(submissionUnitId)) {
+      return false;
+    }
+    if (navbarScope.isAdministrator && selectedUpt && selectedUpt !== "Semua UPT") {
       const subUpt = sub.unitUpt || sub.upt || emp?.unitUpt;
       if (subUpt && subUpt !== selectedUpt) return false;
     }
-    if (!usesBackendApprovalScope && selectedUltg && selectedUltg !== "Semua ULTG") {
+    if (navbarScope.isAdministrator && selectedUltg && selectedUltg !== "Semua ULTG") {
       const subUltg = sub.unitUltg || sub.ultg || emp?.unitUltg;
       if (subUltg && subUltg !== selectedUltg) return false;
     }
-    if (!usesBackendApprovalScope && selectedGi && selectedGi !== "Semua GI") {
+    if (selectedGi && selectedGi !== "Semua GI") {
       const subGi = sub.garduInduk || sub.gi || emp?.garduInduk;
       if (subGi && subGi !== selectedGi) return false;
     }
 
-    // Pending approval queues must remain actionable even when the transaction
-    // date is outside the dashboard's current reporting period.
+    const transactionDate = sub.tanggalLembur || sub.tanggalMulai || sub.tanggalBerangkat || sub.tanggalPengajuan || "";
+    if (startDate && transactionDate && transactionDate < startDate) return false;
+    if (endDate && transactionDate && transactionDate > endDate) return false;
 
     return true;
   });
@@ -1098,14 +1113,6 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
       return;
     }
 
-    const settings = DataService.getSettings() || {};
-    const newEstCost = calculateOvertimeCost(
-      checkerLemburSub.employeeGajiPokok || 55e5,
-      corrNum,
-      checkerLemburSub.isHariLibur,
-      settings.overtimeFormula
-    );
-
     const updatedFields = {
       tanggalLembur: checkerLemburTanggalLembur,
       jamMulai: checkerLemburJamMulai,
@@ -1116,7 +1123,6 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
       durasiJam: corrNum,
       jumlahJamKoreksi: corrNum,
       catatanKoreksi: catatanKoreksiInput,
-      estimasiBiayaRupiah: newEstCost,
       keterangan: `${checkerLemburKategoriLembur} - ${checkerLemburJenisPekerjaan} (${corrNum} Jam)`
     };
 
@@ -1251,13 +1257,7 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
       return;
     }
 
-    const settings = DataService.getSettings() || {};
-    const newEstCost = calculateOvertimeCost(
-      checkerLemburSub.employeeGajiPokok || 55e5,
-      corrNum,
-      checkerLemburSub.isHariLibur,
-      settings.overtimeFormula
-    );
+    const newEstCost = calculateCorrectedOvertimeCost(checkerLemburSub, corrNum);
 
     DataService.saveCheckerDraftCorrection(
       checkerLemburSub.id,
@@ -1300,18 +1300,9 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
       return;
     }
 
-    const settings = DataService.getSettings() || {};
-    const newEstCost = calculateOvertimeCost(
-      checkerLemburSub.employeeGajiPokok || 55e5,
-      corrNum,
-      checkerLemburSub.isHariLibur,
-      settings.overtimeFormula
-    );
-
     setApproveSub(checkerLemburSub);
     setCheckerExtraData({
       jumlahJamKoreksi: corrNum,
-      estimasiBiayaRupiah: newEstCost,
       catatanKoreksi: catatanKoreksiInput,
       checkerDraftCorrection: false
     });
@@ -2590,6 +2581,9 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                 <p className="text-sky-800 text-[11px] font-semibold pt-1 border-t border-sky-200/60 mt-1">
                   * Durasi Awal Pengajuan Maker: <strong>{checkerLemburSub.durasiJam} Jam</strong>
                 </p>
+                <p className="text-emerald-700 text-[11px] font-semibold">
+                  * Biaya Lembur Pengajuan: <strong>{formatRupiah(checkerLemburSub.biayaLembur)}</strong>
+                </p>
               </div>
 
               <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
@@ -2656,11 +2650,9 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                     <p className="text-[9px] font-bold text-slate-500 uppercase">Estimasi Biaya Koreksi</p>
                     <p className="text-xs font-black font-mono text-emerald-700 leading-tight">
                       {formatRupiah(
-                        calculateOvertimeCost(
-                          checkerLemburSub.employeeGajiPokok || 55e5,
-                          Number(jumlahJamKoreksiInput) || 0,
-                          checkerLemburSub.isHariLibur,
-                          (DataService.getSettings() || {}).overtimeFormula
+                        calculateCorrectedOvertimeCost(
+                          checkerLemburSub,
+                          Number(jumlahJamKoreksiInput) || 0
                         )
                       )}
                     </p>

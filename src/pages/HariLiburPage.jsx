@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { MasterDataService } from "../services/masterDataService";
+import { api } from "../services/api";
+import { toast } from "../utils/toast";
 import { formatDateIndonesian } from "../utils/formatters";
 import { Calendar, Plus, Search, Edit2, Trash2, AlertCircle, Filter } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -25,12 +26,18 @@ export const HariLiburPage = ({ currentUser, onRefreshData }) => {
 
   const loadData = async () => {
     try {
-      const res = await MasterDataService.fetchApiAll("m_hari_libur", { limit: 1000 });
-      setHolidays(res.data || []);
+      const response = await api.client.get("/hari-libur", { params: { limit: 1000 } });
+      const rows = response.data?.data || [];
+      setHolidays(rows.map((item) => ({
+        ...item,
+        id_hpl: item.id_hari_libur,
+        tgl_libur: item.tanggal,
+        ket_libur: item.nama_hari_libur,
+        tahun_libur: Number(String(item.tanggal).slice(0, 4))
+      })));
     } catch (err) {
-      console.error("Gagal memuat Hari Libur:", err);
-      const resFallback = MasterDataService.getAll("m_hari_libur", { limit: 1000 });
-      setHolidays(resFallback.data || []);
+      setHolidays([]);
+      toast.error(err.response?.data?.message || "Gagal memuat Master Hari Libur.");
     }
   };
 
@@ -94,37 +101,36 @@ export const HariLiburPage = ({ currentUser, onRefreshData }) => {
       return;
     }
 
-    const targetId = editingItem ? editingItem.id_hpl : autoIdHpl;
+    const targetId = editingItem ? editingItem.id_hpl : null;
 
     const payload = {
-      id_hpl: Number(targetId),
-      tgl_libur: tglLibur,
-      ket_libur: ketLibur.trim(),
-      tahun_libur: Number(tahunLibur)
+      tanggal: tglLibur,
+      nama_hari_libur: ketLibur.trim(),
+      keterangan: "Hari libur kalender nasional Indonesia",
+      is_active: "Y"
     };
 
-    let result;
-    if (editingItem) {
-      result = await MasterDataService.updateApiRecord("m_hari_libur", targetId, payload);
-    } else {
-      result = await MasterDataService.createApiRecord("m_hari_libur", payload);
-    }
-
-    if (result.success) {
+    try {
+      if (editingItem) await api.client.put(`/hari-libur/${targetId}`, payload);
+      else await api.client.post("/hari-libur", payload);
       setIsModalOpen(false);
-      loadData();
+      await loadData();
       if (onRefreshData) onRefreshData();
-    } else {
-      setFormError(result.error || "Gagal menyimpan data Hari Libur.");
+      toast.success(`Hari libur berhasil ${editingItem ? "diperbarui" : "ditambahkan"}.`);
+    } catch (error) {
+      setFormError(error.response?.data?.message || "Gagal menyimpan data Hari Libur.");
     }
   };
 
   const handleDelete = async (id) => {
     if (confirm("Apakah Anda yakin ingin menghapus Hari Libur Nasional ini?")) {
-      const res = await MasterDataService.deleteApiRecord("m_hari_libur", id);
-      if (res.success) {
-        loadData();
+      try {
+        await api.client.delete(`/hari-libur/${id}`);
+        await loadData();
         if (onRefreshData) onRefreshData();
+        toast.success("Hari libur berhasil dihapus.");
+      } catch (error) {
+        toast.error(error.response?.data?.message || "Gagal menghapus hari libur.");
       }
     }
   };

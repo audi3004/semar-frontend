@@ -10,6 +10,7 @@ import { AlertNotificationModal } from "../components/common/AlertNotificationMo
 import { LoadingSkeleton } from "../components/common/LoadingSkeleton";
 import { validateSakitInput } from "../utils/submissionValidation";
 import { compressImageDataUrl } from "../utils/imageCompressor";
+import { resolveBackendFileFields, resolveBackendFileUrl } from "../utils/fileUrl";
 import {
   Stethoscope,
   Plus,
@@ -98,6 +99,7 @@ export const SakitPage = ({
     const fileName = item.foto ? String(item.foto).split("/").pop() : "";
     return {
       ...item,
+      ...resolveBackendFileFields(item),
       id: String(item.id_sakit),
       type: "sakit",
       nomorDokumen: item.nomor_dokumen || `SAKIT-${item.id_sakit}`,
@@ -112,11 +114,11 @@ export const SakitPage = ({
       instansiKlinik: item.agenda || "",
       namaDokterFaskes: item.agenda || "",
       namaDokter: item.nama_dokter || "",
-      suratKeteranganDokterUrl: item.foto || "",
+      suratKeteranganDokterUrl: resolveBackendFileUrl(item.foto),
       suratKeteranganDokterFileName: fileName,
       suratKeteranganDokterFileType: fileName.toLowerCase().endsWith(".pdf") ? "pdf" : "image",
       diagnosaSingkat: item.keterangan || "",
-      makerSignatureUrl: item.maker_signature || "",
+      makerSignatureUrl: resolveBackendFileUrl(item.maker_signature),
       status: normalizeStatus(item),
       currentApproverRole: item.status?.role?.kode_role?.toLowerCase() || "maker"
     };

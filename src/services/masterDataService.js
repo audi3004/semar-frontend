@@ -546,8 +546,8 @@ export class MasterDataService {
       }
       if (table === "m_hari_libur") {
         normalized.id_hpl = item.id_hpl ?? item.id_hari_libur;
-        normalized.tgl_libur = item.tgl_libur ?? item.tanggal_libur;
-        normalized.ket_libur = item.ket_libur ?? item.keterangan ?? item.nama_libur;
+        normalized.tgl_libur = item.tgl_libur ?? item.tanggal_libur ?? item.tanggal;
+        normalized.ket_libur = item.ket_libur ?? item.nama_hari_libur ?? item.keterangan ?? item.nama_libur;
         normalized.tahun_libur = item.tahun_libur ?? (normalized.tgl_libur ? new Date(normalized.tgl_libur).getFullYear() : null);
       }
       return normalized;

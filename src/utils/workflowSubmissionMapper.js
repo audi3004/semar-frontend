@@ -1,3 +1,5 @@
+import { resolveBackendFileFields, resolveBackendFileUrl } from "./fileUrl";
+
 const ROLE_MAP = {
   MAKER: "maker",
   CHECKER: "checker",
@@ -39,6 +41,7 @@ const common = (item, type, id) => {
 
   return {
     ...item,
+    ...resolveBackendFileFields(item),
     id: String(id),
     type,
     employeeNip: item.petugas?.nip || String(item.id_petugas || ""),
@@ -72,9 +75,10 @@ export const mapWorkflowLembur = (item) => ({
   jenisPekerjaan: item.jenis_pekerjaan || "",
   areaGroup: item.area_group || item.petugas?.unit?.nama_unit || "",
   kegiatanDetail: item.detail_pekerjaan_lembur || "",
-  estimasiBiayaRupiah: Number(item.estimasi_biaya_rupiah || item.total_biaya || 0),
+  biayaLembur: Number(item.biaya_lembur || 0),
+  estimasiBiayaRupiah: Number(item.biaya_lembur || 0),
   isHariLibur: item.is_hari_libur === "Y",
-  makerSignatureUrl: item.maker_signature || ""
+  makerSignatureUrl: resolveBackendFileUrl(item.maker_signature)
 });
 
 export const mapWorkflowCuti = (item) => ({
@@ -89,7 +93,7 @@ export const mapWorkflowCuti = (item) => ({
   nomorTeleponDarurat: item.nomor_telepon_darurat || "",
   keterangan: item.perihal || "",
   pengganti: item.pengganti || "",
-  makerSignatureUrl: item.maker_signature || ""
+  makerSignatureUrl: resolveBackendFileUrl(item.maker_signature)
 });
 
 export const mapWorkflowIjin = (item) => ({
@@ -102,7 +106,7 @@ export const mapWorkflowIjin = (item) => ({
   jumlahHari: Math.max(1, Math.round((new Date(item.tgl_selesai) - new Date(item.tanggal)) / 86400000) + 1),
   jumlahHariDisetujui: item.jumlah_hari_disetujui,
   keterangan: item.keterangan || "",
-  makerSignatureUrl: item.maker_signature || ""
+  makerSignatureUrl: resolveBackendFileUrl(item.maker_signature)
 });
 
 export const mapWorkflowSakit = (item) => ({
@@ -115,9 +119,9 @@ export const mapWorkflowSakit = (item) => ({
   instansiKlinik: item.agenda || "",
   namaDokterFaskes: item.agenda || "",
   namaDokter: item.nama_dokter || "",
-  suratKeteranganDokterUrl: item.foto || "",
+  suratKeteranganDokterUrl: resolveBackendFileUrl(item.foto),
   diagnosaSingkat: item.keterangan || "",
-  makerSignatureUrl: item.maker_signature || ""
+  makerSignatureUrl: resolveBackendFileUrl(item.maker_signature)
 });
 
 export const mapWorkflowSppd = (item) => {
@@ -141,6 +145,6 @@ export const mapWorkflowSppd = (item) => {
     expenses,
     totalBiaya: expenses.reduce((sum, expense) => sum + expense.nominal, 0),
     totalEstimasiBiaya: expenses.reduce((sum, expense) => sum + expense.nominal, 0),
-    makerSignatureUrl: item.maker_signature || ""
+    makerSignatureUrl: resolveBackendFileUrl(item.maker_signature)
   };
 };
