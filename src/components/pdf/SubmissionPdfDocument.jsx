@@ -679,14 +679,8 @@ export const SubmissionPdfDocument = ({
    const qrPayload = `TANGGAL CETAK: ${currentDateStr}\nNO: ${finalDocNo}`;
    const qrCodeDataUrl =
       propQrCodeDataUrl || generateQrCodeDataUrlSync(qrPayload);
-   const hasAttachment =
-      (submission.type === "lembur" &&
-         !!(
-            submission.fotoDokumentasi1Url ||
-            submission.fotoDokumentasi2Url ||
-            submission.dasarPerintahLemburUrl
-         )) ||
-      (submission.type === "sakit" && !!submission.suratKeteranganDokterUrl);
+   // Lampiran asli ditambahkan sesudah PDF formulir selesai dibuat oleh PdfService.
+   const hasAttachment = false;
 
    const hasVerificationAssigned = DataService.isVerificationAssigned();
    const steps = submission.approvalSteps || [];

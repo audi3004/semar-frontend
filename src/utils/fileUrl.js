@@ -5,9 +5,22 @@ export const resolveBackendFileUrl = (value) => {
   if (!value) return "";
   const raw = String(value).trim();
   if (!raw) return "";
-  if (/^(data:|blob:|https?:\/\/)/i.test(raw)) return raw;
+  if (/^(data:|blob:)/i.test(raw)) return raw;
 
   let path = raw.replace(/\\/g, "/");
+  if (/^https?:\/\//i.test(path)) {
+    try {
+      const parsed = new URL(path);
+      if (!parsed.pathname.startsWith("/uploads/") && !parsed.pathname.startsWith("/api/uploads/")) {
+        return raw;
+      }
+      // URL file lama dapat menunjuk ke origin frontend. Ambil pathname-nya lalu
+      // bangun ulang menggunakan base backend yang aktif.
+      path = `${parsed.pathname}${parsed.search}`;
+    } catch {
+      return raw;
+    }
+  }
   if (!path.startsWith("/")) path = `/${path}`;
   if (!path.startsWith("/uploads/") && !path.startsWith("/api/uploads/")) return raw;
 

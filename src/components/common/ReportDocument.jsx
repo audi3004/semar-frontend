@@ -4,7 +4,7 @@ import { QrCode } from "lucide-react";
 import plnLogo from "../../assets/plnes-logo.png";
 import semarLogoDefault from "../../assets/logo_semar_trns.png";
 import {
-   formatDateIndonesian,
+   formatDateIndonesianLong,
    formatRupiah,
    getFormattedDocNo,
 } from "../../utils/formatters";
@@ -117,12 +117,12 @@ export const ReportDocument = ({
          {/* KONTEN UTAMA DOKUMEN */}
          <main className="main-content my-4">
             {filterInfo &&
-               (filterInfo.month || filterInfo.type || filterInfo.unit) && (
+               (filterInfo.month || filterInfo.periode || filterInfo.type || filterInfo.unit) && (
                   <div className="mb-3 text-xs border-b border-black pb-2 flex flex-wrap gap-4">
-                     {filterInfo.month && (
+                     {(filterInfo.month || filterInfo.periode) && (
                         <div>
                            <span className="font-bold">Periode:</span>{" "}
-                           {filterInfo.month} {filterInfo.year || ""}
+                           {filterInfo.periode || `${filterInfo.month} ${filterInfo.year || ""}`}
                         </div>
                      )}
                      {filterInfo.type && (
@@ -186,7 +186,7 @@ export const ReportDocument = ({
                                  </td>
                                  <td className="border border-black p-2">
                                     {item.tanggalPengajuan
-                                       ? formatDateIndonesian(
+                                       ? formatDateIndonesianLong(
                                             item.tanggalPengajuan,
                                          )
                                        : "-"}
@@ -212,9 +212,9 @@ export const ReportDocument = ({
                                        "-"}
                                  </td>
                                  <td className="border border-black p-2">
-                                    {item.keterangan ||
-                                       item.maksudSppd ||
-                                       item.alasan ||
+                                    {item.keterangan || item.kegiatanDetail ||
+                                       item.maksudPerjalanan || item.maksudSppd ||
+                                       item.diagnosaSingkat || item.ijinReasonType || item.cutiType || item.alasan ||
                                        "-"}
                                  </td>
                                  <td className="border border-black p-2 text-right font-bold">

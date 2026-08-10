@@ -103,7 +103,7 @@ export const SppdPage = ({
       ...resolveBackendFileFields(item),
       id: String(item.id_sppd),
       type: "sppd",
-      nomorDokumen: item.no_sppd,
+      nomorDokumen: item.nomor_dokumen || item.no_sppd,
       nomorSuratTugas: item.no_sppd,
       employeeNip: item.petugas?.nip || String(item.id_petugas),
       employeeName: item.petugas?.nama || "-",

@@ -20,10 +20,11 @@ import {
 import QRCode from "qrcode";
 import {
    formatRupiah,
-   formatDateIndonesian,
+   formatDateIndonesianLong as formatDateIndonesian,
    getStatusLabel,
    getFormattedDocNo,
 } from "../../utils/formatters";
+import { getSubmissionAttachments } from "../../utils/pdfAttachments";
 import { PdfService } from "../../services/pdfService";
 import { DataService } from "../../services/dataService";
 import { AuthService } from "../../services/authService";
@@ -413,16 +414,10 @@ export const DocumentViewerModal = ({
    const isFullyApproved =
       submission &&
       (submission.status === "APPROVED" || submission.status === "approved");
-   const hasAttachment =
-      submission &&
-      ((submission.type === "lembur" &&
-         !!(
-            submission.fotoDokumentasi1Url ||
-            submission.fotoDokumentasi2Url ||
-            submission.dasarPerintahLemburUrl
-         )) ||
-         (submission.type === "sakit" &&
-            !!submission.suratKeteranganDokterUrl));
+   const submissionAttachments = submission
+      ? getSubmissionAttachments(submission)
+      : [];
+   const hasAttachment = submissionAttachments.length > 0;
 
    // Totals for Report HTML View
    const reportTotalSppd = reportSubmissions
@@ -978,6 +973,7 @@ export const DocumentViewerModal = ({
                   </div>
                ) : (
                   /* HTML FORMAL VIEW FOR SINGLE SUBMISSION DOCUMENT */
+                  <>
                   <div className="printable-a4-document max-w-[210mm] w-full mx-auto bg-white border border-black p-5 sm:p-6 space-y-4 rounded-none text-black">
                      {/* Header Kop Surat PLN Formal */}
                      <DocumentLetterhead
@@ -1523,13 +1519,80 @@ export const DocumentViewerModal = ({
                            </p>
                            <p className="text-black font-bold">
                               <span className="print:hidden">
-                                 Halaman 1 dari {hasAttachment ? 2 : 1}
+                                 Halaman 1 dari {1 + submissionAttachments.length}
                               </span>
                               <span className="hidden print:inline-block page-counter"></span>
                            </p>
                         </div>
                      </div>
                   </div>
+
+                  {submissionAttachments.map((attachment, index) => {
+                     const isPdfAttachment = /\.pdf(?:$|\?)/i.test(attachment.url) ||
+                        /\.pdf$/i.test(attachment.fileName || "");
+                     return (
+                        <div
+                           key={`${attachment.url}-${index}`}
+                           className="printable-a4-document max-w-[210mm] min-h-[297mm] w-full mx-auto mt-4 bg-white border border-black p-5 sm:p-6 rounded-none text-black flex flex-col print:break-before-page"
+                        >
+                           <DocumentLetterhead
+                              label="LAMPIRAN DOKUMEN PENGAJUAN"
+                              numberLabel={`No: ${finalDocNo}`}
+                              dateLabel={`Tgl Pengajuan: ${formatDateIndonesian(submission.tanggalPengajuan)}`}
+                           />
+
+                           <div className="my-4 border border-black p-3 flex-1 flex flex-col min-h-0">
+                              <div className="mb-3 pb-2 border-b border-black">
+                                 <h3 className="text-sm font-extrabold uppercase tracking-wide">
+                                    {attachment.label}
+                                 </h3>
+                                 <p className="text-[10px] text-slate-700 mt-1 font-mono break-all">
+                                    Berkas: {attachment.fileName}
+                                 </p>
+                              </div>
+                              {isPdfAttachment ? (
+                                 <object
+                                    data={attachment.url}
+                                    type="application/pdf"
+                                    className="w-full flex-1 min-h-[215mm] border border-slate-300"
+                                 >
+                                    <a href={attachment.url} target="_blank" rel="noreferrer" className="text-sky-700 underline">
+                                       Buka lampiran PDF {attachment.label}
+                                    </a>
+                                 </object>
+                              ) : (
+                                 <img
+                                    src={attachment.url}
+                                    alt={attachment.label}
+                                    className="w-full flex-1 min-h-0 object-contain"
+                                    referrerPolicy="no-referrer"
+                                 />
+                              )}
+                           </div>
+
+                           <div className="pt-3 border-t border-black flex flex-col sm:flex-row items-center justify-between text-[10px] text-black gap-2 page-break-inside-avoid">
+                              <div className="flex items-center gap-2.5">
+                                 {qrCodeDataUrl ? (
+                                    <img src={qrCodeDataUrl} alt="QR Code Pengesahan" className="w-10 h-10 object-contain" />
+                                 ) : (
+                                    <div className="p-1.5 bg-white border border-black"><QrCode className="w-7 h-7 text-black" /></div>
+                                 )}
+                                 <div>
+                                    <p className="font-bold text-black">DOKUMEN ELEKTRONIK</p>
+                                    <p className="text-[9.5px] text-black">Otorisasi SEMAR PLN Electricity Services</p>
+                                    <p className="text-[9.5px] text-black">Unit Pelaksana 2 Jawa Tengah &amp; DI Yogyakarta</p>
+                                 </div>
+                              </div>
+                              <div className="text-right font-mono text-[9.5px] flex flex-col items-end">
+                                 <img src={semarLogo} alt="SEMAR Logo" className="h-6 sm:h-7 w-auto object-contain mb-0.5" referrerPolicy="no-referrer" />
+                                 <p>Waktu Cetak: {new Date().toLocaleString("id-ID")}</p>
+                                 <p className="font-bold">Halaman {index + 2} dari {submissionAttachments.length + 1}</p>
+                              </div>
+                           </div>
+                        </div>
+                     );
+                  })}
+                  </>
                )}
             </div>
 

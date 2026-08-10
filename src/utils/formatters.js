@@ -22,6 +22,22 @@ export function formatDateIndonesian(dateStr) {
   }
 }
 
+export function formatDateIndonesianLong(dateStr) {
+  if (!dateStr) return "-";
+  try {
+    const raw = String(dateStr).slice(0, 10);
+    const parts = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const d = parts
+      ? new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]))
+      : new Date(dateStr);
+    if (isNaN(d.getTime())) return String(dateStr);
+    const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  } catch {
+    return String(dateStr);
+  }
+}
+
 export function formatDateDDMMYYYY(dateStr) {
   if (!dateStr) return "15031998";
   const cleanStr = String(dateStr).split("T")[0];
@@ -253,7 +269,11 @@ export function getFormattedDocNo(sub) {
     return sub.nomorDokumen;
   }
 
-  const rawDocNo = sub.nomorDokumen || sub.docNo || sub.nomor_dokumen || sub.no_dokumen || "";
+  const rawDocNo = sub.nomorDokumen || sub.docNo || sub.nomor_dokumen || sub.no_dokumen || sub.no_cuti || sub.no_sppd || "";
+
+  // Backend adalah satu-satunya sumber nomor resmi. Jangan membentuk ulang nomor
+  // yang sudah tersimpan karena dapat mengubah unit/periode/sequence dokumen.
+  if (rawDocNo) return String(rawDocNo);
 
   // 1. Sequence Number
   let seqStr = "001";

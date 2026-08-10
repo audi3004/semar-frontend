@@ -132,7 +132,7 @@ export const mapWorkflowSppd = (item) => {
   ];
   return {
     ...common(item, "sppd", item.id_sppd),
-    nomorDokumen: item.no_sppd || `SPPD-${item.id_sppd}`,
+    nomorDokumen: item.nomor_dokumen || item.no_sppd || `SPPD-${item.id_sppd}`,
     nomorSuratTugas: item.no_sppd || "",
     tanggalPengajuan: String(item.created_at || item.tgl_berangkat || "").slice(0, 10),
     maksudPerjalanan: item.maksud_dinas,
@@ -147,4 +147,15 @@ export const mapWorkflowSppd = (item) => {
     totalEstimasiBiaya: expenses.reduce((sum, expense) => sum + expense.nominal, 0),
     makerSignatureUrl: resolveBackendFileUrl(item.maker_signature)
   };
+};
+
+export const mapWorkflowSubmission = (item) => {
+  const type = String(item?.report_type || item?.type || "").toLowerCase();
+  return ({
+    lembur: mapWorkflowLembur,
+    cuti: mapWorkflowCuti,
+    ijin: mapWorkflowIjin,
+    sakit: mapWorkflowSakit,
+    sppd: mapWorkflowSppd,
+  }[type] || ((value) => value))(item);
 };

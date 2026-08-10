@@ -219,6 +219,19 @@ const getDynamicOvertimeMapping = () => {
    }
    return OVERTIME_MAPPING;
 };
+
+const getAbsenceTypes = (officer) =>
+   (officer?.alasan_ketidakhadiran || []).map((reason) =>
+      String(reason.jenis || "").toUpperCase(),
+   );
+
+const getAbsenceColorClass = (officer) => {
+   const types = getAbsenceTypes(officer);
+   if (types.includes("SAKIT")) return "bg-rose-50 border-rose-400 text-rose-950";
+   if (types.includes("IJIN")) return "bg-sky-50 border-sky-400 text-sky-950";
+   if (types.includes("CUTI")) return "bg-amber-50 border-amber-400 text-amber-950";
+   return "bg-slate-50 border-slate-300 text-slate-900";
+};
 export const LemburPage = ({
    currentUser,
    submissions,
@@ -363,6 +376,8 @@ export const LemburPage = ({
    const isOperatorCuti =
       jenisPekerjaan === "Pengganti Piket (Operator sedang cuti)";
    const isSiagaLibur = jenisPekerjaan === "Siaga / Libur Nasional";
+   const isFixedEightHourMaker =
+      currentUser?.role === "maker" && (isOperatorCuti || isSiagaLibur);
 
    const filteredOfficers = replacementCandidates
       .filter((item) => item.is_active !== "N" && item.nip !== currentUser?.nip)
@@ -438,6 +453,16 @@ export const LemburPage = ({
    const showLemburCheckbox = isSiagaLibur;
    const showPetugasPendamping = isOperatorCuti;
    const isPetugasPendampingRequired = isOperatorCuti;
+   const selectedReplacementOfficer = filteredOfficers.find(
+      (officer) => String(officer.nip) === String(petugasPendampingNip),
+   );
+
+   useEffect(() => {
+      if (isFixedEightHourMaker) {
+         setJamMulai("08:00");
+         setJamSelesai("16:00");
+      }
+   }, [isFixedEightHourMaker]);
 
    // Estimasi Biaya Rumus Rupiah hanya muncul dari proses Checker sampai Approver 3
    const isApprovalRole = [
@@ -573,15 +598,14 @@ export const LemburPage = ({
          setIsHariLibur(false);
       }
 
-      // Task 1 & Task 2: Default jam lembur set to 8 jam (08:00 - 16:00) jika Pengganti Piket / Siaga Libur
+      // Maker selalu mendapat durasi tetap 8 jam untuk Pengganti Piket / Siaga Libur.
       if (
-         newVal === "Pengganti Piket (Operator sedang cuti)" ||
-         newVal === "Siaga / Libur Nasional"
+         currentUser?.role === "maker" &&
+         (newVal === "Pengganti Piket (Operator sedang cuti)" ||
+            newVal === "Siaga / Libur Nasional")
       ) {
-         if (!jamMulai || !jamSelesai) {
-            setJamMulai("08:00");
-            setJamSelesai("16:00");
-         }
+         setJamMulai("08:00");
+         setJamSelesai("16:00");
       }
    };
 
@@ -603,12 +627,14 @@ export const LemburPage = ({
    const handleFileUpload = (e, setUrl, setName) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      if (file.size > 5 * 1024 * 1024) {
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      const maxSize = isPdf ? 1024 * 1024 : 500 * 1024;
+      if (file.size > maxSize) {
          setAlertModal({
             isOpen: true,
             type: "error",
             title: "File Terlalu Besar",
-            message: `${file.name} melebihi batas maksimum 5 MB.`,
+            message: `${file.name} melebihi batas maksimum ${isPdf ? "1 MB untuk PDF" : "500 KB untuk foto"}.`,
          });
          e.target.value = "";
          return;
@@ -686,13 +712,13 @@ export const LemburPage = ({
       const response = isCreate
          ? await api.createLembur(buildApiPayload())
          : await api.updateLembur(editingSub.id_lembur, buildApiPayload());
+      const saved = response?.data || response || {};
       const savedId =
-         response?.data?.id_lembur ||
-         response?.id_lembur ||
+         saved?.id_lembur ||
          editingSub?.id_lembur;
       if (release && savedId) await api.releaseLembur(savedId);
       await loadLemburFromApi();
-      return savedId;
+      return { savedId, saved };
    };
 
    const handleSaveDraftLembur = async (e) => {
@@ -787,9 +813,9 @@ export const LemburPage = ({
       };
 
       try {
-         const savedId = await saveToApi();
+         const { savedId, saved } = await saveToApi();
          payload.id = String(savedId);
-         payload.nomorDokumen = `LMB-${String(savedId).padStart(6, "0")}`;
+         payload.nomorDokumen = saved.nomor_dokumen || editingSub?.nomorDokumen || `LMB-${String(savedId).padStart(6, "0")}`;
       } catch (error) {
          setAlertModal({
             isOpen: true,
@@ -2245,8 +2271,10 @@ export const LemburPage = ({
                               type="time"
                               value={jamMulai}
                               onChange={(e) => setJamMulai(e.target.value)}
+                              readOnly={isFixedEightHourMaker}
+                              disabled={isFixedEightHourMaker}
                               required
-                              className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none"
+                              className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none disabled:bg-slate-200 disabled:text-slate-700 disabled:cursor-not-allowed"
                            />
                         </div>
 
@@ -2258,11 +2286,19 @@ export const LemburPage = ({
                               type="time"
                               value={jamSelesai}
                               onChange={(e) => setJamSelesai(e.target.value)}
+                              readOnly={isFixedEightHourMaker}
+                              disabled={isFixedEightHourMaker}
                               required
-                              className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none"
+                              className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none disabled:bg-slate-200 disabled:text-slate-700 disabled:cursor-not-allowed"
                            />
                         </div>
                      </div>
+
+                     {isFixedEightHourMaker && (
+                        <p className="-mt-1 text-[11px] font-bold text-sky-800 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
+                           Durasi otomatis 8 jam (08:00–16:00). Jam lembur dikunci untuk Maker.
+                        </p>
+                     )}
 
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
@@ -2411,10 +2447,10 @@ export const LemburPage = ({
                                     setPetugasPendampingError("");
                               }}
                               required={isPetugasPendampingRequired}
-                              className={`w-full h-11 px-3 bg-slate-50 border rounded-xl text-slate-900 focus:bg-white focus:outline-none cursor-pointer transition ${
+                              className={`w-full h-11 px-3 border rounded-xl focus:outline-none cursor-pointer transition ${
                                  petugasPendampingError
                                     ? "border-rose-500 ring-2 ring-rose-200 bg-rose-50/20"
-                                    : "border-slate-300"
+                                    : getAbsenceColorClass(selectedReplacementOfficer)
                               }`}
                            >
                               <option value="">
@@ -2425,8 +2461,8 @@ export const LemburPage = ({
                                     : "-- Pilih Petugas Pendamping (Opsional) --"}
                               </option>
                               {filteredOfficers.map((u) => {
-                                 const statusBadge = u.alasan_ketidakhadiran
-                                    ?.map((reason) => `[${reason.jenis}]`)
+                                 const statusBadge = getAbsenceTypes(u)
+                                    .map((type) => `[${type}]`)
                                     .join(" ") || "";
 
                                  return (
@@ -2613,7 +2649,7 @@ export const LemburPage = ({
                                  </span>
                                  <input
                                     type="file"
-                                    accept="image/*,.pdf,.doc,.docx"
+                                    accept="image/*,.pdf,application/pdf"
                                     onChange={(e) =>
                                        handleFileUpload(
                                           e,

@@ -3,25 +3,29 @@ import { pdf } from "@react-pdf/renderer";
 import QRCode from "qrcode";
 import { SubmissionPdfDocument } from "../components/pdf/SubmissionPdfDocument";
 import { ReportPdfDocument } from "../components/pdf/ReportPdfDocument";
-import { getFormattedDocNo, formatDateIndonesian } from "../utils/formatters";
+import { getFormattedDocNo } from "../utils/formatters";
+import { appendSubmissionAttachments } from "../utils/pdfAttachments";
 
 export class PdfService {
-  /**
-   * Generates a Blob URL for A4 PDF Preview
-   */
-  static async generatePdfBlobUrl(submission) {
+  static async generateSubmissionBlob(submission) {
     let qrCodeDataUrl = "";
     try {
       const finalDocNo = getFormattedDocNo(submission);
       const currentDateStr = new Date().toLocaleDateString("id-ID");
-      const qrPayload = `TANGGAL CETAK: ${currentDateStr}\nNO: ${finalDocNo}`;
-      qrCodeDataUrl = await QRCode.toDataURL(qrPayload, { width: 150, margin: 1 });
+      qrCodeDataUrl = await QRCode.toDataURL(`TANGGAL CETAK: ${currentDateStr}\nNO: ${finalDocNo}`, { width: 150, margin: 1 });
     } catch (err) {
       console.error("Failed to generate QR Code Data URL:", err);
     }
 
     const doc = React.createElement(SubmissionPdfDocument, { submission, qrCodeDataUrl });
-    const blob = await pdf(doc).toBlob();
+    return appendSubmissionAttachments(await pdf(doc).toBlob(), submission);
+  }
+
+  /**
+   * Generates a Blob URL for A4 PDF Preview
+   */
+  static async generatePdfBlobUrl(submission) {
+    const blob = await this.generateSubmissionBlob(submission);
     return URL.createObjectURL(blob);
   }
 
@@ -29,18 +33,7 @@ export class PdfService {
    * Downloads A4 PDF Document
    */
   static async downloadPdf(submission) {
-    let qrCodeDataUrl = "";
-    try {
-      const finalDocNo = getFormattedDocNo(submission);
-      const currentDateStr = new Date().toLocaleDateString("id-ID");
-      const qrPayload = `TANGGAL CETAK: ${currentDateStr}\nNO: ${finalDocNo}`;
-      qrCodeDataUrl = await QRCode.toDataURL(qrPayload, { width: 150, margin: 1 });
-    } catch (err) {
-      console.error("Failed to generate QR Code Data URL:", err);
-    }
-
-    const doc = React.createElement(SubmissionPdfDocument, { submission, qrCodeDataUrl });
-    const blob = await pdf(doc).toBlob();
+    const blob = await this.generateSubmissionBlob(submission);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -85,18 +78,7 @@ export class PdfService {
    * Generates a Base64 Data URL for A4 PDF Preview (Bypasses Chrome blob iframe block)
    */
   static async generatePdfDataUrl(submission) {
-    let qrCodeDataUrl = "";
-    try {
-      const finalDocNo = getFormattedDocNo(submission);
-      const currentDateStr = new Date().toLocaleDateString("id-ID");
-      const qrPayload = `TANGGAL CETAK: ${currentDateStr}\nNO: ${finalDocNo}`;
-      qrCodeDataUrl = await QRCode.toDataURL(qrPayload, { width: 150, margin: 1 });
-    } catch (err) {
-      console.error("Failed to generate QR Code Data URL:", err);
-    }
-
-    const doc = React.createElement(SubmissionPdfDocument, { submission, qrCodeDataUrl });
-    const blob = await pdf(doc).toBlob();
+    const blob = await this.generateSubmissionBlob(submission);
     return await this.blobToDataUrl(blob);
   }
 

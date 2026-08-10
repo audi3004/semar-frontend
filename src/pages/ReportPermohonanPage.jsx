@@ -28,22 +28,69 @@ import { formatRupiah, formatDateIndonesian, getStatusBadgeColor, getStatusLabel
 import { ExportService } from "../services/exportService";
 import { PdfService } from "../services/pdfService";
 import { DataService } from "../services/dataService";
-import { AuthService } from "../services/authService";
-import { MasterDataService } from "../services/masterDataService";
 import { DocumentViewerModal } from "../components/common/DocumentViewerModal";
 import { LoadingSkeleton } from "../components/common/LoadingSkeleton";
 import { motion, AnimatePresence } from "motion/react";
+import { api } from "../services/api";
+import { mapWorkflowSubmission } from "../utils/workflowSubmissionMapper";
 
 const DEFAULT_SIGNATORIES = DataService.getDefaultReportSignatories("UPT Semarang");
 
 export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   const [selectedMonth, setSelectedMonth] = useState("all");
-  const [selectedYear, setSelectedYear] = useState("2026");
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   const [selectedType, setSelectedType] = useState("all");
   const [selectedUnit, setSelectedUnit] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDocSub, setSelectedDocSub] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [reportSubmissions, setReportSubmissions] = useState([]);
+  const [reportSummary, setReportSummary] = useState({});
+  const [isLoadingReport, setIsLoadingReport] = useState(true);
+  const [reportError, setReportError] = useState("");
+  const [reportUsers, setReportUsers] = useState([]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    api.getUsers()
+      .then((rows) => setReportUsers(Array.isArray(rows) ? rows : []))
+      .catch(() => setReportUsers([]));
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    let active = true;
+    const timeout = setTimeout(async () => {
+      setIsLoadingReport(true);
+      setReportError("");
+      try {
+        const year = selectedYear !== "all" ? Number(selectedYear) : null;
+        const month = selectedMonth !== "all" ? Number(selectedMonth) : null;
+        const lastDay = year && month ? new Date(year, month, 0).getDate() : null;
+        const params = {
+          type: selectedType,
+          search: searchQuery.trim() || undefined,
+          start_date: year ? `${year}-${String(month || 1).padStart(2, "0")}-01` : undefined,
+          end_date: year ? `${year}-${String(month || 12).padStart(2, "0")}-${String(lastDay || 31).padStart(2, "0")}` : undefined,
+        };
+        const result = await api.getReportPermohonan(params);
+        if (!active) return;
+        setReportSubmissions((result.transactions || []).map(mapWorkflowSubmission));
+        setReportSummary(result.summary || {});
+      } catch (error) {
+        if (!active) return;
+        setReportSubmissions([]);
+        setReportSummary({});
+        setReportError(error.response?.data?.message || "Gagal mengambil report permohonan dari server.");
+      } finally {
+        if (active) setIsLoadingReport(false);
+      }
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
+  }, [currentUser, selectedMonth, selectedYear, selectedType, searchQuery]);
 
   // Auto increment sequence for document number (001, 002, ...)
   const [docSeq, setDocSeq] = useState(() => {
@@ -71,30 +118,22 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
     if (!currentUser) return null;
     if (currentUser.role === "admin") return null;
 
-    try {
-      const masterPeg = MasterDataService.getAll("m_pegawai", { limit: 1000 })?.data || [];
-      const pegRecord = masterPeg.find((p) => p.nip === currentUser.nip);
-      if (pegRecord) {
-        const masterUnit = MasterDataService.getAll("m_unit", { limit: 1000 })?.data || [];
-        const unitRecord = masterUnit.find((u) => u.id_unit_upt === pegRecord.id_unit_upt);
-        if (unitRecord && unitRecord.upt) {
-          return unitRecord.upt;
-        }
-      }
-    } catch (e) {
-      console.error("Error finding user unit in master pegawai:", e);
-    }
-
-    const directUnit = currentUser.unitUpt || currentUser.unit_upt;
-    if (directUnit && directUnit !== "Seluruh UPT") {
-      return directUnit;
-    }
-
-    return "UPT Semarang"; // fallback
+    const serverUnit = currentUser.unitUpt || currentUser.unit_upt || currentUser.nama_unit || currentUser.unit;
+    if (serverUnit && serverUnit !== "Seluruh UPT") return serverUnit;
+    return null;
   }, [currentUser]);
 
   // Compute available Unit/UPT groups for dropdown rendering based on scope
   const availableUnitGroups = useMemo(() => {
+    const names = [...new Set(reportSubmissions.flatMap((submission) =>
+      (submission.unitHierarchy || []).map((unit) => unit.name).filter(Boolean)
+    ))].sort((a, b) => a.localeCompare(b, "id"));
+    return names.length ? [{
+      label: "Unit Tersedia dari Server",
+      options: names.map((name) => ({ value: name, label: name })),
+    }] : [];
+
+    /* Legacy fallback retained only for reference data migration. */
     const allGroups = [
       {
         label: "UPT Semarang",
@@ -140,7 +179,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
 
     const normalizedScope = userUnitScope.toLowerCase();
     return allGroups.filter(g => g.label.toLowerCase().includes(normalizedScope) || normalizedScope.includes(g.label.toLowerCase()));
-  }, [userUnitScope]);
+  }, [userUnitScope, reportSubmissions]);
 
   // Scope utama berasal dari Navbar melalui daftar submissions yang sudah terfilter.
   // Filter unit di halaman ini bersifat tambahan dan tidak dipaksa saat halaman dibuka.
@@ -170,9 +209,9 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   // Filter officers and employees EXCLUDING maker roles, scoped to current user UPT and active status
   const nonMakerSignatories = useMemo(() => {
     try {
-      const authUsers = AuthService.getUsers() || [];
-      const masterPegawai = MasterDataService.getAll("m_pegawai", { limit: 1000 })?.data || [];
-      const masterUnits = MasterDataService.getAll("m_unit", { limit: 1000 })?.data || [];
+      const authUsers = reportUsers;
+      const masterPegawai = [];
+      const masterUnits = [];
       
       const finalUnitScope = userUnitScope || (selectedUnit !== "all" ? selectedUnit : null);
 
@@ -267,17 +306,17 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
       console.error("Error in nonMakerSignatories useMemo:", err);
       return [];
     }
-  }, [currentUser, selectedUnit, userUnitScope]);
+  }, [currentUser, selectedUnit, userUnitScope, reportUsers]);
 
   if (!currentUser) return <LoadingSkeleton variant="dashboard" />;
 
   // Filter ONLY submissions with status APPROVED / approved (Completed Approval 3)
   const approved3Submissions = useMemo(() => {
-    return (submissions || []).filter((sub) => {
+    return reportSubmissions.filter((sub) => {
       const s = sub.status ? sub.status.toUpperCase() : "";
       return s === "APPROVED";
     });
-  }, [submissions]);
+  }, [reportSubmissions]);
 
   // Apply User Filters
   const filteredSubmissions = useMemo(() => {
@@ -305,7 +344,12 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
 
       // Unit Filter per UPT Grouping
       if (selectedUnit !== "all") {
-        const u = (sub.unitUltg || sub.unitUpt || "").toLowerCase();
+        const u = [
+          sub.unitUpt,
+          sub.unitUltg,
+          sub.garduInduk,
+          ...(sub.unitHierarchy || []).map((unit) => unit.name),
+        ].filter(Boolean).join(" ").toLowerCase();
         const sel = selectedUnit.toLowerCase();
 
         let match = u.includes(sel);
@@ -400,7 +444,8 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
     unitUpt: currentUser?.unitUpt || effectiveUnit,
     selectedMonth,
     selectedYear,
-    docSeq
+    docSeq,
+    summary: reportSummary
   };
 
   // Check if selected period is completed (periode yang sudah selesai) vs ongoing (periode yang sedang berlangsung)
@@ -551,6 +596,13 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
         )}
       </AnimatePresence>
 
+      {reportError && (
+        <div className="p-4 bg-rose-50 border border-rose-300 text-rose-800 font-bold text-xs rounded-2xl flex items-center gap-2">
+          <X className="w-4 h-4 shrink-0" />
+          {reportError}
+        </div>
+      )}
+
       {/* Page Title & Action Bar */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
@@ -579,7 +631,8 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
           )}
           <button
             onClick={handleOpenPreviewModal}
-            className="flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-md shadow-sky-600/20 transition cursor-pointer flex items-center justify-center gap-2"
+            disabled={isLoadingReport}
+            className="flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-md shadow-sky-600/20 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Pratinjau tampilan ReportPdfDocument.jsx untuk periode saat ini"
           >
             <Eye className="w-4 h-4 text-sky-200" />
@@ -587,7 +640,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
           </button>
           <button
             onClick={() => handleOpenExportModal("pdf")}
-            disabled={isExporting || !isPeriodCompleted}
+            disabled={isExporting || isLoadingReport || !isPeriodCompleted}
             title={
               !isPeriodCompleted
                 ? "Generate PDF hanya dapat dilakukan untuk periode yang sudah selesai"
@@ -760,7 +813,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-emerald-600" />
             <h3 className="font-bold text-sm text-slate-900">
-              Daftar Permohonan Di Setujui ({filteredSubmissions.length}) berkas
+              Daftar Permohonan Disetujui ({filteredSubmissions.length}) berkas
             </h3>
           </div>
           <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
@@ -785,7 +838,14 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {filteredSubmissions.length === 0 ? (
+              {isLoadingReport ? (
+                <tr>
+                  <td colSpan={9} className="p-10 text-center text-slate-500 font-bold">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-600" />
+                    Mengambil report dari server...
+                  </td>
+                </tr>
+              ) : filteredSubmissions.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-12 text-center text-slate-400 text-xs">
                     <p className="font-bold text-slate-600 mb-1">Tidak ada dokumen yang telah di Setujui</p>

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { RoleSwitcher } from "../common/RoleSwitcher";
 import { Bell, Calendar, LogOut, ChevronDown, Building, Lock, X, CheckCircle2, AlertCircle, Layers, Eye, EyeOff, Menu, Briefcase } from "lucide-react";
-import { AuthService } from "../../services/authService";
+import { api } from "../../services/api";
 import { DataService } from "../../services/dataService";
 import { MasterDataService } from "../../services/masterDataService";
 import { useNavigate } from "react-router-dom";
@@ -70,26 +70,33 @@ export const Navbar = ({
   const [showSuccessPass, setShowSuccessPass] = useState(false);
   const [showNewPassInput, setShowNewPassInput] = useState(false);
   const [showConfirmPassInput, setShowConfirmPassInput] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const effectiveUnreadCount = unreadNotifCount ?? unreadNotificationCount ?? 0;
 
-  const handleChangePasswordSubmit = (e) => {
+  const handleChangePasswordSubmit = async (e) => {
     e.preventDefault();
     setPassMessage(null);
     if (newPassword !== confirmPassword) {
       setPassMessage({ type: "error", text: "Konfirmasi kata sandi baru tidak cocok." });
       return;
     }
-    if (!currentUser) return;
-    const res = AuthService.changePassword(currentUser.nip, null, newPassword);
-    if (res.success) {
-      setPassMessage({ 
-        type: "success", 
-        text: "Kata sandi berhasil diperbarui!",
-        encryptedPassword: res.encryptedPassword 
+    if (!currentUser?.id_user) return;
+    setIsChangingPassword(true);
+    try {
+      await api.client.patch(`/users/${currentUser.id_user}/password`, {
+        old_password: oldPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword
       });
+      setPassMessage({ type: "success", text: "Password berhasil diperbarui. Silakan login kembali." });
       setOldPassword("");
-    } else {
-      setPassMessage({ type: "error", text: res.message });
+      setNewPassword("");
+      setConfirmPassword("");
+      window.setTimeout(() => onLogout(), 1200);
+    } catch (error) {
+      setPassMessage({ type: "error", text: error.response?.data?.message || "Gagal memperbarui password." });
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -464,6 +471,18 @@ export const Navbar = ({
 
             <form onSubmit={handleChangePasswordSubmit} className="space-y-3.5">
               <div>
+                <label className="text-xs font-bold text-slate-800 block mb-1">Kata Sandi Lama</label>
+                <input
+                  type="password"
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  placeholder="Masukkan kata sandi saat ini"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#075369] focus:ring-1 focus:ring-[#075369]/30"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+              <div>
                 <label className="text-xs font-bold text-slate-800 block mb-1">Kata Sandi Baru (Min. 6 Karakter)</label>
                 <div className="relative">
                   <input
@@ -564,9 +583,10 @@ export const Navbar = ({
                 </button>
                 <button
                   type="submit"
+                  disabled={isChangingPassword}
                   className="px-5 py-2 bg-[#075369] hover:bg-[#053d4d] text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer"
                 >
-                  Simpan Password
+                  {isChangingPassword ? "Menyimpan..." : "Simpan Password"}
                 </button>
               </div>
             </form>

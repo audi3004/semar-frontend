@@ -133,6 +133,11 @@ export const api = {
     };
   },
 
+  getReportPermohonan: async (params = {}) => {
+    const res = await apiClient.get("/reports/permohonan", { params });
+    return res.data?.data || { transactions: [], summary: {} };
+  },
+
   // Reset cache / storage helper
   resetCache: async () => {
     try {

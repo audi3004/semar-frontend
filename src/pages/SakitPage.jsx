@@ -299,6 +299,13 @@ export const SakitPage = ({
         return;
       }
 
+      const maxSize = isPdf ? 1024 * 1024 : 500 * 1024;
+      if (file.size > maxSize) {
+        alert(`Ukuran ${isPdf ? "PDF maksimal 1 MB" : "foto maksimal 500 KB"}.`);
+        e.target.value = "";
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = async () => {
         const rawResult = reader.result;

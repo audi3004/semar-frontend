@@ -10,7 +10,7 @@ import {
 import QRCode from "qrcode";
 import {
    formatRupiah,
-   formatDateIndonesian,
+   formatDateIndonesianLong,
    getFormattedDocNo,
 } from "../../utils/formatters";
 import { DataService } from "../../services/dataService";
@@ -526,7 +526,7 @@ export const ReportPdfDocument = ({
                            </Text>
                            <Text style={[styles.td, { width: "11%" }]}>
                               {item.tanggalPengajuan
-                                 ? formatDateIndonesian(item.tanggalPengajuan)
+                                 ? formatDateIndonesianLong(item.tanggalPengajuan)
                                  : "-"}
                            </Text>
                            <View style={[styles.td, { width: "18%" }]}>
@@ -570,9 +570,9 @@ export const ReportPdfDocument = ({
                                  "-"}
                            </Text>
                            <Text style={[styles.td, { width: "17%" }]}>
-                              {item.keterangan ||
-                                 item.maksudSppd ||
-                                 item.alasan ||
+                              {item.keterangan || item.kegiatanDetail ||
+                                 item.maksudPerjalanan || item.maksudSppd ||
+                                 item.diagnosaSingkat || item.ijinReasonType || item.cutiType || item.alasan ||
                                  "-"}
                            </Text>
                            <Text
