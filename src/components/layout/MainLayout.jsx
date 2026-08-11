@@ -33,6 +33,8 @@ export default function MainLayout({
   unreadCount,
   selectedProject,
   setSelectedProject,
+  selectedUp,
+  setSelectedUp,
   selectedUpt,
   setSelectedUpt,
   selectedUltg,
@@ -44,11 +46,13 @@ export default function MainLayout({
   endDate,
   setEndDate,
   onResetFilters,
+  upList,
   uptList,
   ultgList,
   giList,
   projectList,
   projectReadOnly,
+  upReadOnly,
   uptReadOnly,
   ultgReadOnly,
   giReadOnly,
@@ -111,6 +115,8 @@ export default function MainLayout({
         unreadNotificationCount={unreadCount}
         selectedProject={selectedProject}
         setSelectedProject={setSelectedProject}
+        selectedUp={selectedUp}
+        setSelectedUp={setSelectedUp}
         selectedUpt={selectedUpt}
         setSelectedUpt={setSelectedUpt}
         selectedUltg={selectedUltg}
@@ -122,11 +128,13 @@ export default function MainLayout({
         endDate={endDate}
         setEndDate={setEndDate}
         onResetFilters={onResetFilters}
+        upList={upList}
         uptList={uptList}
         ultgList={ultgList}
         giList={giList}
         projectList={projectList}
         projectReadOnly={projectReadOnly}
+        upReadOnly={upReadOnly}
         uptReadOnly={uptReadOnly}
         ultgReadOnly={ultgReadOnly}
         giReadOnly={giReadOnly}
@@ -193,6 +201,7 @@ export default function MainLayout({
               currentUser,
               onRefreshData: refreshData,
               selectedProject,
+              selectedUp,
               selectedUpt,
               selectedUltg,
               selectedGi,
@@ -214,6 +223,8 @@ export default function MainLayout({
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           selectedProject={selectedProject}
           setSelectedProject={setSelectedProject}
+          selectedUp={selectedUp}
+          setSelectedUp={setSelectedUp}
           selectedUpt={selectedUpt}
           setSelectedUpt={setSelectedUpt}
           selectedUltg={selectedUltg}
@@ -225,6 +236,7 @@ export default function MainLayout({
           endDate={endDate}
           setEndDate={setEndDate}
           onResetFilters={onResetFilters}
+          upList={upList}
           uptList={uptList}
           ultgList={ultgList}
           giList={giList}
@@ -481,6 +493,24 @@ export default function MainLayout({
                 </label>
 
                 <div>
+                  <span className="text-[10px] font-semibold text-slate-500 block mb-0.5">UP</span>
+                  <select
+                    value={selectedUp}
+                    onChange={(e) => {
+                      setSelectedUp(e.target.value);
+                      setSelectedUpt("Semua UPT");
+                      setSelectedUltg("Semua ULTG");
+                      setSelectedGi("Semua GI");
+                    }}
+                    disabled={upReadOnly}
+                    className="w-full h-10 px-2.5 rounded-xl border border-slate-300 font-semibold text-slate-800 bg-slate-50"
+                  >
+                    <option value="Semua UP">Semua UP</option>
+                    {(upList || []).map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                  </select>
+                </div>
+
+                <div>
                   <span className="text-[10px] font-semibold text-slate-500 block mb-0.5">UPT</span>
                   <select
                     value={selectedUpt}
@@ -493,7 +523,7 @@ export default function MainLayout({
                     disabled={uptReadOnly}
                     className="w-full h-10 px-2.5 rounded-xl border border-slate-300 font-semibold text-slate-800 bg-slate-50"
                     >
-                    {!uptReadOnly && <option value="Semua UPT">Semua UPT</option>}
+                    <option value="Semua UPT">Semua UPT</option>
                     {(uptList || []).map((u) => (
                       <option key={u} value={u}>{u}</option>
                     ))}
@@ -512,8 +542,7 @@ export default function MainLayout({
                     disabled={ultgReadOnly}
                     className="w-full h-10 px-2.5 rounded-xl border border-slate-300 font-semibold text-slate-800 bg-slate-50"
                     >
-                    {!ultgReadOnly && <option value="Semua ULTG">Semua ULTG</option>}
-                    {ultgReadOnly && selectedUltg === "Semua ULTG" && <option value="Semua ULTG">Semua ULTG</option>}
+                    <option value="Semua ULTG">Semua ULTG</option>
                     {(ultgList || []).map((u) => (
                       <option key={u} value={u}>{u}</option>
                     ))}

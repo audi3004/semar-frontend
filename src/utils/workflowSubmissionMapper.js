@@ -126,10 +126,10 @@ export const mapWorkflowSakit = (item) => ({
 
 export const mapWorkflowSppd = (item) => {
   const expenses = [
-    { id: "akomodasi", kategori: "Akomodasi", deskripsi: item.desc_akomodasi || "Biaya Akomodasi", nominal: Number(item.rp_akomodasi || 0) },
-    { id: "transportasi", kategori: "Transportasi", deskripsi: item.desc_transportasi || "Biaya Transportasi", nominal: Number(item.rp_transportasi || 0) },
-    { id: "lain-lain", kategori: "Lain-lain", deskripsi: item.desc_lain_lain || "Biaya Lain-lain", nominal: Number(item.rp_lain_lain || 0) }
-  ];
+    { id: "akomodasi", kategori: "Akomodasi", deskripsi: item.desc_akomodasi, nominal: Number(item.rp_akomodasi || 0) },
+    { id: "transportasi", kategori: "Transportasi", deskripsi: item.desc_transportasi, nominal: Number(item.rp_transportasi || 0) },
+    { id: "lain-lain", kategori: "Lain-lain", deskripsi: item.desc_lain_lain, nominal: Number(item.rp_lain_lain || 0) }
+  ].filter((expense) => Boolean(String(expense.deskripsi || "").trim()) || expense.nominal > 0);
   return {
     ...common(item, "sppd", item.id_sppd),
     nomorDokumen: item.nomor_dokumen || item.no_sppd || `SPPD-${item.id_sppd}`,

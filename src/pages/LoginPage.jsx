@@ -38,7 +38,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
     setIsSubmitting(false);
     if (res.success) {
       toast.success("Login Berhasil! Selamat datang kembali.");
-      onLoginSuccess();
+      onLoginSuccess(res.user);
     } else {
       const msg = res.message || "Login gagal. Periksa kembali NIP dan kata sandi Anda.";
       setErrorMsg(msg);
@@ -52,7 +52,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
     const res = await AuthService.login(user.nip, user.password || "123456");
     if (res.success) {
       toast.success(`Login Cepat Berhasil sebagai ${user.name}!`);
-      onLoginSuccess();
+      onLoginSuccess(res.user);
     } else {
       toast.error(res.message || "Gagal melakukan login cepat.");
     }

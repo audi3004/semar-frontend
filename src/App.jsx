@@ -91,10 +91,11 @@ function AppContent() {
 
   // Global Header Filter State
   const [selectedProject, setSelectedProject] = useState("Semua Project");
+  const [selectedUp, setSelectedUp] = useState("Semua UP");
   const [selectedUpt, setSelectedUpt] = useState("Semua UPT");
   const [selectedUltg, setSelectedUltg] = useState("Semua ULTG");
   const [selectedGi, setSelectedGi] = useState("Semua GI");
-  const [filterMasterData, setFilterMasterData] = useState({ units: [], projects: [], jabatans: [] });
+  const [filterMasterData, setFilterMasterData] = useState({ units: [], projects: [], jabatans: [], unitRoles: [] });
 
   // Helper to get first and last day of current month as default
   const getFirstAndLastDayOfCurrentMonth = () => {
@@ -244,13 +245,17 @@ function AppContent() {
     Promise.all([
       api.client.get("/unit", { params: { limit: 1000 } }),
       api.client.get("/projects", { params: { limit: 1000 } }),
-      api.client.get("/jabatan", { params: { limit: 1000 } })
-    ]).then(([unitResponse, projectResponse, jabatanResponse]) => {
+      api.client.get("/jabatan", { params: { limit: 1000 } }),
+      ["admin", "superadmin"].includes(currentUser.role)
+        ? Promise.resolve([])
+        : api.getMyUnitRoles()
+    ]).then(([unitResponse, projectResponse, jabatanResponse, unitRoles]) => {
       if (!active) return;
       setFilterMasterData({
         units: unitResponse.data?.data || [],
         projects: projectResponse.data?.data || [],
-        jabatans: jabatanResponse.data?.data || []
+        jabatans: jabatanResponse.data?.data || [],
+        unitRoles: unitRoles || []
       });
     }).catch((error) => console.error("Gagal memuat scope filter Navbar:", error));
     return () => { active = false; };
@@ -347,14 +352,57 @@ function AppContent() {
       path.push(cursor);
       cursor = unitById.get(Number(cursor.id_induk_unit));
     }
-    const findPath = (pattern) => path.find((unit) => pattern.test(String(unit.nama_unit || "")));
-    const upt = findPath(/\bUPT\b|UNIT PELAKSANA|^UP\s/i) || path[path.length - 1] || ownUnit;
-    const ultg = findPath(/\bULTG\b/i);
-    const gi = findPath(/\bGI\b|GARDU INDUK/i);
+    const getUnitKind = (unit) => {
+      const name = String(unit?.nama_unit || "").trim().toUpperCase();
+      if (/^(GI\b|GARDU INDUK\b)/.test(name)) return "GI";
+      if (/^ULTG\b/.test(name)) return "ULTG";
+      if (/^(UPT\b|UNIT PELAKSANA\b)/.test(name)) return "UPT";
+      if (/^UP(?:\s*\d|\b)/.test(name)) return "UP";
+      return "UNIT";
+    };
+    const findPath = (kind) => path.find((unit) => getUnitKind(unit) === kind);
+    const up = findPath("UP");
+    const upt = findPath("UPT");
+    const ultg = findPath("ULTG");
+    const gi = findPath("GI");
     const ownChildren = ownUnitId ? collectDescendants(ownUnitId) : [];
-    const giOptions = (ultg ? collectDescendants(ultg.id_unit) : ownChildren)
-      .filter((unit) => /\bGI\b|GARDU INDUK/i.test(String(unit.nama_unit || "")))
-      .map((unit) => unit.nama_unit);
+    const activeAssignments = filterMasterData.unitRoles
+      .filter((assignment) => assignment.is_active === "Y" && Number(assignment.id_unit));
+    const scopedUnits = isAdministrator
+      ? masterUnits
+      : Array.from(new Map(
+          (activeAssignments.length
+            ? activeAssignments.flatMap((assignment) => assignment.scope_type === "SELF_AND_DESCENDANTS"
+                ? collectDescendants(assignment.id_unit)
+                : [unitById.get(Number(assignment.id_unit))].filter(Boolean))
+            : ownChildren)
+            .map((unit) => [Number(unit.id_unit), unit])
+        ).values());
+    const scopedIds = new Set(scopedUnits.map((unit) => Number(unit.id_unit)));
+    const selectableIds = new Set(scopedIds);
+    scopedUnits.forEach((unit) => {
+      let parent = unitById.get(Number(unit.id_induk_unit));
+      const visitedParentIds = new Set();
+      while (parent) {
+        const parentId = Number(parent.id_unit);
+        if (visitedParentIds.has(parentId)) break;
+        visitedParentIds.add(parentId);
+        selectableIds.add(parentId);
+        parent = unitById.get(Number(parent.id_induk_unit));
+      }
+    });
+    const selectableUnits = masterUnits.filter((unit) => selectableIds.has(Number(unit.id_unit)));
+
+    const selectedName = selectedGi !== "Semua GI" ? selectedGi
+      : selectedUltg !== "Semua ULTG" ? selectedUltg
+        : selectedUpt !== "Semua UPT" ? selectedUpt
+          : selectedUp !== "Semua UP" ? selectedUp : "";
+    const selectedUnit = masterUnits.find((unit) => unit.nama_unit === selectedName);
+    const activeFilterUnitIds = selectedUnit
+      ? collectDescendants(selectedUnit.id_unit)
+          .map((unit) => Number(unit.id_unit))
+          .filter((id) => isAdministrator || scopedIds.has(id))
+      : scopedUnits.map((unit) => Number(unit.id_unit));
 
     const jabatanId = Number(person.id_jabatan || person.jabatan?.id_jabatan || 0);
     const jabatan = person.jabatan || masterJabatans.find((item) => Number(item.id_jabatan) === jabatanId);
@@ -373,72 +421,55 @@ function AppContent() {
       projectId,
       allowedProjectIds,
       projectLabel: isAdministrator ? "Semua Project" : (projectId === 1 ? projectNames.join(" & ") : (projectNames[0] || "Project tidak ditemukan")),
-      uptName: isAdministrator ? "Semua UPT" : (upt?.nama_unit || currentUser?.unitUpt || "Semua UPT"),
+      upName: isAdministrator ? "Semua UP" : (up?.nama_unit || "Semua UP"),
+      uptName: isAdministrator ? "Semua UPT" : (upt?.nama_unit || "Semua UPT"),
       ultgName: isAdministrator ? "Semua ULTG" : (ultg?.nama_unit || "Semua ULTG"),
       giName: isAdministrator ? "Semua GI" : (gi?.nama_unit || "Semua GI"),
-      uptList: isAdministrator ? masterUnits.filter((u) => /\bUPT\b|UNIT PELAKSANA|^UP\s/i.test(u.nama_unit)).map((u) => u.nama_unit) : [upt?.nama_unit].filter(Boolean),
-      ultgList: isAdministrator ? masterUnits.filter((u) => /\bULTG\b/i.test(u.nama_unit)).map((u) => u.nama_unit) : [ultg?.nama_unit].filter(Boolean),
-      giList: isAdministrator ? masterUnits.filter((u) => /\bGI\b|GARDU INDUK/i.test(u.nama_unit)).map((u) => u.nama_unit) : Array.from(new Set(giOptions)),
-      canSelectGi: isAdministrator || Boolean(ownUnit && /\bULTG\b/i.test(String(ownUnit.nama_unit || ""))),
-      allowedUnitIds: isAdministrator ? masterUnits.map((unit) => Number(unit.id_unit)) : ownChildren.map((unit) => Number(unit.id_unit)),
+      canSelectUnit: isAdministrator || selectableUnits.length > 1,
+      allowedUnitIds: scopedUnits.map((unit) => Number(unit.id_unit)),
+      activeFilterUnitIds,
+      selectableUnits,
+      unitKindById: Object.fromEntries(masterUnits.map((unit) => [unit.id_unit, getUnitKind(unit)]))
     };
-  }, [currentUser, masterUnits, masterJabatans, masterProjects]);
+  }, [currentUser, masterUnits, masterJabatans, masterProjects, filterMasterData.unitRoles, selectedUp, selectedUpt, selectedUltg, selectedGi]);
 
   useEffect(() => {
     if (!currentUser || !masterUnits.length) return;
     setSelectedProject(navbarScope.projectLabel);
+    setSelectedUp(navbarScope.upName);
     setSelectedUpt(navbarScope.uptName);
     setSelectedUltg(navbarScope.ultgName);
-    setSelectedGi(navbarScope.canSelectGi ? "Semua GI" : navbarScope.giName);
-  }, [currentUser?.nip, currentUser?.role, masterUnits.length, navbarScope.projectLabel, navbarScope.uptName, navbarScope.ultgName, navbarScope.giName, navbarScope.canSelectGi]);
+    setSelectedGi(navbarScope.giName);
+  }, [currentUser?.nip, currentUser?.role, masterUnits.length]);
 
-  const uptList = useMemo(() => {
-    const fromMaster = masterUnits.map((u) => u.upt);
-    const fromUsers = allUsers.map((u) => u.unitUpt || u.upt);
-    const fromSubmissions = submissions.map((s) => s.unitUpt || s.upt);
-    const combined = [...fromMaster, ...fromUsers, ...fromSubmissions].filter(Boolean);
-    return Array.from(new Set(combined)).sort();
-  }, [masterUnits, allUsers, submissions]);
-
-  const ultgList = useMemo(() => {
-    const fromMaster = masterUnits
-      .filter((u) => selectedUpt === "Semua UPT" || u.upt === selectedUpt)
-      .map((u) => u.ultg);
-    const fromUsers = allUsers
-      .filter((u) => selectedUpt === "Semua UPT" || (u.unitUpt || u.upt) === selectedUpt)
-      .map((u) => u.unitUltg || u.ultg);
-    const fromSubmissions = submissions
-      .filter((s) => selectedUpt === "Semua UPT" || (s.unitUpt || s.upt) === selectedUpt)
-      .map((s) => s.unitUltg || s.ultg);
-    const combined = [...fromMaster, ...fromUsers, ...fromSubmissions].filter(Boolean);
-    return Array.from(new Set(combined)).sort();
-  }, [masterUnits, allUsers, submissions, selectedUpt]);
-
-  const giList = useMemo(() => {
-    const fromMaster = masterUnits
-      .filter(
-        (u) =>
-          (selectedUpt === "Semua UPT" || u.upt === selectedUpt) &&
-          (selectedUltg === "Semua ULTG" || u.ultg === selectedUltg)
-      )
-      .map((u) => u.gardu_induk);
-    const fromUsers = allUsers
-      .filter(
-        (u) =>
-          (selectedUpt === "Semua UPT" || (u.unitUpt || u.upt) === selectedUpt) &&
-          (selectedUltg === "Semua ULTG" || (u.unitUltg || u.ultg) === selectedUltg)
-      )
-      .map((u) => u.garduInduk || u.gi);
-    const fromSubmissions = submissions
-      .filter(
-        (s) =>
-          (selectedUpt === "Semua UPT" || (s.unitUpt || s.upt) === selectedUpt) &&
-          (selectedUltg === "Semua ULTG" || (s.unitUltg || s.ultg) === selectedUltg)
-      )
-      .map((s) => s.garduInduk || s.gi);
-    const combined = [...fromMaster, ...fromUsers, ...fromSubmissions].filter(Boolean);
-    return Array.from(new Set(combined)).sort();
-  }, [masterUnits, allUsers, submissions, selectedUpt, selectedUltg]);
+  const hierarchicalUnitLists = useMemo(() => {
+    const units = navbarScope.selectableUnits || [];
+    const byId = new Map(masterUnits.map((unit) => [Number(unit.id_unit), unit]));
+    const kindOf = (unit) => navbarScope.unitKindById?.[unit.id_unit] || "UNIT";
+    const hasAncestor = (unit, selectedName) => {
+      if (!selectedName || selectedName.startsWith("Semua ")) return true;
+      let cursor = unit;
+      const visitedUnitIds = new Set();
+      while (cursor) {
+        if (cursor.nama_unit === selectedName) return true;
+        const cursorId = Number(cursor.id_unit);
+        if (visitedUnitIds.has(cursorId)) break;
+        visitedUnitIds.add(cursorId);
+        cursor = byId.get(Number(cursor.id_induk_unit));
+      }
+      return false;
+    };
+    const names = (kind, ...parents) => units
+      .filter((unit) => kindOf(unit) === kind && parents.every((parent) => hasAncestor(unit, parent)))
+      .map((unit) => unit.nama_unit)
+      .sort((a, b) => String(a).localeCompare(String(b), "id"));
+    return {
+      upList: names("UP"),
+      uptList: names("UPT", selectedUp),
+      ultgList: names("ULTG", selectedUp, selectedUpt),
+      giList: names("GI", selectedUp, selectedUpt, selectedUltg)
+    };
+  }, [masterUnits, navbarScope.selectableUnits, navbarScope.unitKindById, selectedUp, selectedUpt, selectedUltg]);
 
   const handleLogout = async () => {
     await AuthService.logout();
@@ -530,20 +561,10 @@ function AppContent() {
       // 3. Global unit filters
       const emp = (allUsers || []).find((u) => u.nip === sub.employeeNip);
       const submissionUnitId = Number(sub.id_unit || emp?.id_unit || emp?.petugas?.id_unit || 0);
-      if (!navbarScope.isAdministrator && submissionUnitId && navbarScope.allowedUnitIds.length && !navbarScope.allowedUnitIds.includes(submissionUnitId)) {
-        return false;
-      }
-      if (navbarScope.isAdministrator && selectedUpt && selectedUpt !== "Semua UPT") {
-        const subUpt = sub.unitUpt || sub.upt || emp?.unitUpt;
-        if (subUpt && subUpt !== selectedUpt) return false;
-      }
-      if (navbarScope.isAdministrator && selectedUltg && selectedUltg !== "Semua ULTG") {
-        const subUltg = sub.unitUltg || sub.ultg || emp?.unitUltg;
-        if (subUltg && subUltg !== selectedUltg) return false;
-      }
-      if (selectedGi && selectedGi !== "Semua GI") {
-        const subGi = sub.garduInduk || sub.gi || emp?.garduInduk;
-        if (subGi && subGi !== selectedGi) return false;
+      const hasSpecificUnitFilter = [selectedUp, selectedUpt, selectedUltg, selectedGi]
+        .some((value) => value && !value.startsWith("Semua "));
+      if ((!navbarScope.isAdministrator || hasSpecificUnitFilter) && navbarScope.activeFilterUnitIds?.length) {
+        if (!submissionUnitId || !navbarScope.activeFilterUnitIds.includes(submissionUnitId)) return false;
       }
 
       const targetDate = getSubmissionPrimaryDate(sub);
@@ -558,6 +579,7 @@ function AppContent() {
     submissions,
     currentUser,
     selectedProject,
+    selectedUp,
     selectedUpt,
     selectedUltg,
     selectedGi,
@@ -573,9 +595,10 @@ function AppContent() {
 
   const handleResetFilters = () => {
     setSelectedProject(navbarScope.projectLabel);
+    setSelectedUp(navbarScope.upName);
     setSelectedUpt(navbarScope.uptName);
     setSelectedUltg(navbarScope.ultgName);
-    setSelectedGi(navbarScope.canSelectGi ? "Semua GI" : navbarScope.giName);
+    setSelectedGi(navbarScope.giName);
     const defaultDates = getFirstAndLastDayOfCurrentMonth();
     setStartDate(defaultDates.startDate);
     setEndDate(defaultDates.endDate);
@@ -614,6 +637,7 @@ function AppContent() {
 
   const hasActiveFilters =
     selectedProject !== "Semua Project" ||
+    selectedUp !== "Semua UP" ||
     selectedUpt !== "Semua UPT" ||
     selectedUltg !== "Semua ULTG" ||
     selectedGi !== "Semua GI" ||
@@ -684,8 +708,8 @@ function AppContent() {
         path="/login"
         element={
           <LoginPage
-            onLoginSuccess={() => {
-              setCurrentUser(AuthService.getCurrentUser());
+            onLoginSuccess={(user) => {
+              setCurrentUser(user || AuthService.getCurrentUser());
               refreshData();
               navigate("/dashboard");
             }}
@@ -714,6 +738,8 @@ function AppContent() {
             unreadCount={unreadCount}
             selectedProject={selectedProject}
             setSelectedProject={setSelectedProject}
+            selectedUp={selectedUp}
+            setSelectedUp={setSelectedUp}
             selectedUpt={selectedUpt}
             setSelectedUpt={setSelectedUpt}
             selectedUltg={selectedUltg}
@@ -725,14 +751,16 @@ function AppContent() {
             endDate={endDate}
             setEndDate={setEndDate}
             onResetFilters={handleResetFilters}
-            uptList={navbarScope.uptList}
-            ultgList={navbarScope.ultgList}
-            giList={navbarScope.giList}
+            upList={hierarchicalUnitLists.upList}
+            uptList={hierarchicalUnitLists.uptList}
+            ultgList={hierarchicalUnitLists.ultgList}
+            giList={hierarchicalUnitLists.giList}
             projectList={masterProjects}
             projectReadOnly={!navbarScope.isAdministrator}
-            uptReadOnly={!navbarScope.isAdministrator}
-            ultgReadOnly={!navbarScope.isAdministrator}
-            giReadOnly={!navbarScope.canSelectGi}
+            upReadOnly={!navbarScope.canSelectUnit}
+            uptReadOnly={!navbarScope.canSelectUnit}
+            ultgReadOnly={!navbarScope.canSelectUnit}
+            giReadOnly={!navbarScope.canSelectUnit}
             navbarScope={navbarScope}
             hasActiveFilters={hasActiveFilters}
             isMobileFilterOpen={isMobileFilterOpen}

@@ -19,6 +19,8 @@ export const Navbar = ({
   unreadNotificationCount,
   selectedProject = "Semua Project",
   setSelectedProject = (_v) => {},
+  selectedUp = "Semua UP",
+  setSelectedUp = (_v) => {},
   selectedUpt = "Semua UPT",
   setSelectedUpt = (_v) => {},
   selectedUltg = "Semua ULTG",
@@ -32,11 +34,13 @@ export const Navbar = ({
   onResetFilters = () => {},
   onToggleSidebar,
   isSidebarOpen = true,
+  upList = [],
   uptList = ["UPT Semarang", "UPT Purwokerto", "UPT Surakarta"],
   ultgList = ["ULTG Semarang", "ULTG Salatiga", "ULTG Kudus", "ULTG Purwokerto"],
   giList = ["GI Krapyak", "GI Ungaran", "GI Tuntang", "GI Kalisari", "GI Tambakakrik"],
   projectList: scopedProjectList,
   projectReadOnly = true,
+  upReadOnly = true,
   uptReadOnly = true,
   ultgReadOnly = true,
   giReadOnly = true,
@@ -336,6 +340,24 @@ export const Navbar = ({
           {/* UPT Filter */}
           <div className="flex items-center gap-1.5 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-full transition shadow-2xs">
             <select
+              value={selectedUp}
+              onChange={(e) => {
+                setSelectedUp(e.target.value);
+                setSelectedUpt("Semua UPT");
+                setSelectedUltg("Semua ULTG");
+                setSelectedGi("Semua GI");
+              }}
+              disabled={upReadOnly}
+              className="bg-transparent font-bold text-slate-800 focus:outline-none disabled:cursor-not-allowed cursor-pointer text-xs"
+            >
+              <option value="Semua UP">Semua UP</option>
+              {(upList || []).map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+            </select>
+          </div>
+
+          {/* UPT Filter */}
+          <div className="flex items-center gap-1.5 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-full transition shadow-2xs">
+            <select
               value={selectedUpt}
               onChange={(e) => {
                 const val = e.target.value;
@@ -346,7 +368,7 @@ export const Navbar = ({
               disabled={uptReadOnly}
               className="bg-transparent font-bold text-slate-800 focus:outline-none disabled:cursor-not-allowed cursor-pointer text-xs"
             >
-              {!uptReadOnly && <option value="Semua UPT">Semua UPT</option>}
+              <option value="Semua UPT">Semua UPT</option>
               {(uptList || []).map((u) => (
                 <option key={u} value={u}>
                   {u}
@@ -367,8 +389,7 @@ export const Navbar = ({
               disabled={ultgReadOnly}
               className="bg-transparent font-bold text-slate-800 focus:outline-none disabled:cursor-not-allowed cursor-pointer text-xs"
             >
-              {!ultgReadOnly && <option value="Semua ULTG">Semua ULTG</option>}
-              {ultgReadOnly && selectedUltg === "Semua ULTG" && <option value="Semua ULTG">Semua ULTG</option>}
+              <option value="Semua ULTG">Semua ULTG</option>
               {(ultgList || []).map((u) => (
                 <option key={u} value={u}>
                   {u}
@@ -437,6 +458,59 @@ export const Navbar = ({
 
         </div>
       </div>}
+
+      {/* Popup profil khusus mobile */}
+      {showUserMenu && currentUser && createPortal(
+        <div className="md:hidden fixed inset-0 z-[9998] flex items-start justify-end p-3 pt-16 bg-slate-950/30 backdrop-blur-[1px]" onClick={() => setShowUserMenu(false)}>
+          <div
+            className="w-[min(19rem,calc(100vw-1.5rem))] bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 space-y-2 animate-in fade-in zoom-in-95 duration-150"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="p-3 bg-slate-50 rounded-xl">
+              <div className="flex items-center gap-3">
+                <img
+                  src={currentUser.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
+                  alt={currentUser.name}
+                  className="w-10 h-10 rounded-full object-cover ring-1 ring-slate-300"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900 truncate">{currentUser.name}</p>
+                  <p className="text-[11px] text-slate-500 truncate">NIP: {currentUser.nip}</p>
+                </div>
+              </div>
+              <div className="mt-3 space-y-1 border-t border-slate-200 pt-2 text-[10px]">
+                <p><span className="font-bold text-slate-500">Role:</span> <span className="font-bold text-[#075369]">{currentUser.roleName || currentUser.role}</span></p>
+                <p><span className="font-bold text-slate-500">Jabatan:</span> <span className="font-semibold text-slate-700">{currentUser.jabatan || "-"}</span></p>
+                <p><span className="font-bold text-slate-500">Unit:</span> <span className="font-semibold text-slate-700">{currentUser.unit || currentUser.unitUpt || "-"}</span></p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowUserMenu(false);
+                setPassMessage(null);
+                setIsChangePassOpen(true);
+              }}
+              className="w-full text-left p-3 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 active:bg-slate-200 flex items-center gap-2 transition"
+            >
+              <Lock className="w-4 h-4 text-[#075369]" /> Ubah Password
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowUserMenu(false);
+                onLogout();
+              }}
+              className="w-full text-left p-3 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 active:bg-rose-100 flex items-center gap-2 transition"
+            >
+              <LogOut className="w-4 h-4" /> Keluar (Logout)
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Modal Ubah Password Mandiri */}
       {isChangePassOpen && createPortal(

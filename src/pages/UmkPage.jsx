@@ -10,6 +10,7 @@ const initialForm = {
   nama_wilayah: "",
   tahun_umk: String(new Date().getFullYear()),
   nominal_umk: "",
+  id_umk_sebelumnya: "",
   is_active: "Y"
 };
 
@@ -81,6 +82,7 @@ export const UmkPage = () => {
       nama_wilayah: record.nama_wilayah || "",
       tahun_umk: String(record.tahun_umk ?? ""),
       nominal_umk: String(record.nominal_umk ?? ""),
+      id_umk_sebelumnya: String(record.id_umk_sebelumnya ?? ""),
       is_active: record.is_active || "Y"
     });
     setFormError("");
@@ -101,6 +103,7 @@ export const UmkPage = () => {
       nama_wilayah: form.nama_wilayah.trim(),
       tahun_umk: year,
       nominal_umk: nominal,
+      id_umk_sebelumnya: form.id_umk_sebelumnya ? Number(form.id_umk_sebelumnya) : null,
       is_active: form.is_active
     };
 
@@ -137,11 +140,11 @@ export const UmkPage = () => {
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full min-w-[850px] text-xs">
-          <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider"><tr><SortableTableHeader field="id_umk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">ID</SortableTableHeader><SortableTableHeader field="jenis_wilayah" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Jenis Wilayah</SortableTableHeader><SortableTableHeader field="nama_wilayah" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Nama Wilayah</SortableTableHeader><SortableTableHeader field="tahun_umk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3">Tahun</SortableTableHeader><SortableTableHeader field="nominal_umk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="right" className="px-4 py-3">Nominal UMK</SortableTableHeader><SortableTableHeader field="is_active" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3">Status</SortableTableHeader><th className="px-4 py-3 text-center">Aksi</th></tr></thead>
+          <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider"><tr><SortableTableHeader field="id_umk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">ID</SortableTableHeader><SortableTableHeader field="jenis_wilayah" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Jenis Wilayah</SortableTableHeader><SortableTableHeader field="nama_wilayah" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Nama Wilayah</SortableTableHeader><SortableTableHeader field="tahun_umk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3">Tahun</SortableTableHeader><th className="px-4 py-3 text-left">UMK Sebelumnya</th><SortableTableHeader field="nominal_umk" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="right" className="px-4 py-3">Nominal UMK</SortableTableHeader><SortableTableHeader field="is_active" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} align="center" className="px-4 py-3">Status</SortableTableHeader><th className="px-4 py-3 text-center">Aksi</th></tr></thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredRecords.map((item) => <tr key={item.id_umk} className="hover:bg-slate-50"><td className="px-4 py-3 font-black">#{item.id_umk}</td><td className="px-4 py-3"><span className={`px-2 py-1 rounded-full font-black ${item.jenis_wilayah === "KOTA" ? "bg-sky-100 text-sky-700" : item.jenis_wilayah === "PROVINSI" ? "bg-purple-100 text-purple-700" : "bg-amber-100 text-amber-800"}`}>{item.jenis_wilayah}</span></td><td className="px-4 py-3 font-bold text-slate-900">{item.nama_wilayah}</td><td className="px-4 py-3 text-center font-bold">{item.tahun_umk}</td><td className="px-4 py-3 text-right font-black text-emerald-700">{rupiah.format(Number(item.nominal_umk || 0))}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-full font-bold ${item.is_active === "N" ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{item.is_active === "N" ? "Nonaktif" : "Aktif"}</span></td><td className="px-4 py-3 text-center"><button onClick={() => openEditForm(item)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100"><Edit2 className="w-4 h-4" /></button></td></tr>)}
-            {isLoading && <tr><td colSpan="7" className="px-4 py-12 text-center text-slate-500">Memuat data...</td></tr>}
-            {!isLoading && filteredRecords.length === 0 && <tr><td colSpan="7" className="px-4 py-12 text-center text-slate-500">Data UMK tidak ditemukan.</td></tr>}
+            {filteredRecords.map((item) => <tr key={item.id_umk} className="hover:bg-slate-50"><td className="px-4 py-3 font-black">#{item.id_umk}</td><td className="px-4 py-3"><span className={`px-2 py-1 rounded-full font-black ${item.jenis_wilayah === "KOTA" ? "bg-sky-100 text-sky-700" : item.jenis_wilayah === "PROVINSI" ? "bg-purple-100 text-purple-700" : "bg-amber-100 text-amber-800"}`}>{item.jenis_wilayah}</span></td><td className="px-4 py-3 font-bold text-slate-900">{item.nama_wilayah}</td><td className="px-4 py-3 text-center font-bold">{item.tahun_umk}</td><td className="px-4 py-3 text-[11px] text-slate-600">{item.umkSebelumnya ? `${item.umkSebelumnya.nama_wilayah} (${item.umkSebelumnya.tahun_umk})` : "-"}</td><td className="px-4 py-3 text-right font-black text-emerald-700">{rupiah.format(Number(item.nominal_umk || 0))}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-full font-bold ${item.is_active === "N" ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{item.is_active === "N" ? "Nonaktif" : "Aktif"}</span></td><td className="px-4 py-3 text-center"><button onClick={() => openEditForm(item)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100"><Edit2 className="w-4 h-4" /></button></td></tr>)}
+            {isLoading && <tr><td colSpan="8" className="px-4 py-12 text-center text-slate-500">Memuat data...</td></tr>}
+            {!isLoading && filteredRecords.length === 0 && <tr><td colSpan="8" className="px-4 py-12 text-center text-slate-500">Data UMK tidak ditemukan.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -152,6 +155,7 @@ export const UmkPage = () => {
           <label className="space-y-1.5 block"><span className="text-xs font-bold text-slate-700">Jenis Wilayah *</span><select value={form.jenis_wilayah} onChange={(e) => updateForm("jenis_wilayah", e.target.value)} className="form-input"><option value="PROVINSI">PROVINSI</option><option value="KABUPATEN">KABUPATEN</option><option value="KOTA">KOTA</option></select></label>
           <label className="space-y-1.5 block"><span className="text-xs font-bold text-slate-700">Nama Wilayah *</span><input value={form.nama_wilayah} onChange={(e) => updateForm("nama_wilayah", e.target.value)} placeholder="Contoh: Kabupaten Banyumas 2026" className="form-input" required /></label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><label className="space-y-1.5"><span className="text-xs font-bold text-slate-700">Tahun UMK *</span><input type="number" min="1900" value={form.tahun_umk} onChange={(e) => updateForm("tahun_umk", e.target.value)} className="form-input" required /></label><label className="space-y-1.5"><span className="text-xs font-bold text-slate-700">Nominal UMK *</span><input type="number" min="1" step="1" value={form.nominal_umk} onChange={(e) => updateForm("nominal_umk", e.target.value)} className="form-input" required /></label></div>
+          <label className="space-y-1.5 block"><span className="text-xs font-bold text-slate-700">Menggantikan UMK Sebelumnya</span><select value={form.id_umk_sebelumnya} onChange={(e) => updateForm("id_umk_sebelumnya", e.target.value)} className="form-input"><option value="">Tidak ada / tahun awal</option>{records.filter((item) => Number(item.tahun_umk) < Number(form.tahun_umk) && Number(item.id_umk) !== Number(editingRecord?.id_umk)).map((item) => <option key={item.id_umk} value={item.id_umk}>{item.nama_wilayah} — {item.tahun_umk}</option>)}</select><span className="text-[10px] text-slate-500">Mapping ini dipakai saat Generate UMK tahunan.</span></label>
           <label className="space-y-1.5 block"><span className="text-xs font-bold text-slate-700">Status *</span><select value={form.is_active} onChange={(e) => updateForm("is_active", e.target.value)} className="form-input"><option value="Y">Aktif</option><option value="N">Nonaktif</option></select></label>
           {formError && <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 break-words">{formError}</div>}
           <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setIsFormOpen(false)} className="h-10 px-4 rounded-xl bg-slate-100 text-xs font-bold">Batal</button><button type="submit" disabled={isSubmitting} className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-xs font-black disabled:opacity-60">{isSubmitting ? "Menyimpan..." : "Simpan"}</button></div>

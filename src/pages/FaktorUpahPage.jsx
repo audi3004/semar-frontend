@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calculator, CircleDollarSign, Edit2, Plus, Search, X } from "lucide-react";
+import { AlertTriangle, Calculator, CalendarCog, CircleDollarSign, Edit2, Plus, Search, WandSparkles, X } from "lucide-react";
 import { api } from "../services/api";
 import { toast } from "../utils/toast";
 import { DataPagination, useDataPagination } from "../components/common/DataPagination";
@@ -8,6 +8,7 @@ import { UpahPegawaiTab } from "./UpahPegawaiTab";
 
 const emptyForm = { masa_kerja: "", koef: "", tmk: "", keterangan: "", is_active: "Y" };
 const percent = (value) => `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 4 }).format(Number(value || 0) * 100)}%`;
+const rupiah = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
 const FaktorKoefTab = () => {
   const [records, setRecords] = useState([]);
@@ -92,14 +93,71 @@ const FaktorKoefTab = () => {
   </div>;
 };
 
+const ParameterTahunanTab = () => {
+  const [records, setRecords] = useState([]);
+  const [form, setForm] = useState({ tahun: String(new Date().getFullYear()), nilai_rata_rata: "", status: "DRAFT" });
+  const [editing, setEditing] = useState(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const load = async () => {
+    const response = await api.client.get("/parameter-upah-tahunan");
+    setRecords(response.data?.data || []);
+  };
+  useEffect(() => { load().catch((error) => toast.error(error.response?.data?.message || "Gagal mengambil parameter tahunan.")); }, []);
+  const openForm = (record = null) => {
+    setEditing(record);
+    setForm(record ? { tahun: String(record.tahun), nilai_rata_rata: String(record.nilai_rata_rata), status: record.status } : { tahun: String(new Date().getFullYear()), nilai_rata_rata: "", status: "DRAFT" });
+    setIsOpen(true);
+  };
+  const submit = async (event) => {
+    event.preventDefault(); setIsSubmitting(true);
+    try {
+      const payload = { tahun: Number(form.tahun), nilai_rata_rata: Number(form.nilai_rata_rata), status: form.status };
+      if (editing) await api.client.put(`/parameter-upah-tahunan/${editing.id_parameter_upah}`, payload);
+      else await api.client.post("/parameter-upah-tahunan", payload);
+      toast.success("Parameter upah tahunan berhasil disimpan."); setIsOpen(false); await load();
+    } catch (error) { toast.error(error.response?.data?.message || "Gagal menyimpan parameter tahunan."); }
+    finally { setIsSubmitting(false); }
+  };
+  return <div className="space-y-5">
+    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3"><div><h1 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2"><CalendarCog className="w-6 h-6 text-amber-600" /> Parameter Upah Tahunan</h1><p className="text-xs text-slate-600 mt-1">Nilai rata-rata nasional/tahunan untuk komponen TMK.</p></div><button onClick={() => openForm()} className="h-10 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> Tambah Parameter</button></div>
+    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm"><table className="w-full text-xs"><thead className="bg-slate-50 text-slate-600 uppercase"><tr><th className="px-4 py-3 text-left">Tahun</th><th className="px-4 py-3 text-right">Nilai Rata-rata</th><th className="px-4 py-3 text-center">Status</th><th className="px-4 py-3 text-center">Aksi</th></tr></thead><tbody className="divide-y divide-slate-100">{records.map((item) => <tr key={item.id_parameter_upah}><td className="px-4 py-3 font-black">{item.tahun}</td><td className="px-4 py-3 text-right font-black text-emerald-700">{rupiah.format(Number(item.nilai_rata_rata))}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-full font-bold ${item.status === "PUBLISHED" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{item.status}</span></td><td className="px-4 py-3 text-center"><button onClick={() => openForm(item)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-amber-50 text-amber-700"><Edit2 className="w-4 h-4" /></button></td></tr>)}</tbody></table></div>
+    {isOpen && <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-end sm:items-center justify-center p-0 sm:p-4"><form onSubmit={submit} className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4"><div className="flex justify-between"><div><h2 className="font-black">{editing ? "Edit" : "Tambah"} Parameter Tahunan</h2><p className="text-xs text-slate-500">Satu parameter untuk setiap tahun.</p></div><button type="button" onClick={() => setIsOpen(false)}><X className="w-5 h-5" /></button></div><label className="block space-y-1"><span className="text-xs font-bold">Tahun</span><input type="number" min="2000" max="2100" className="form-input" value={form.tahun} onChange={(e) => setForm({ ...form, tahun: e.target.value })} required /></label><label className="block space-y-1"><span className="text-xs font-bold">Nilai Rata-rata</span><input type="number" min="1" className="form-input" value={form.nilai_rata_rata} onChange={(e) => setForm({ ...form, nilai_rata_rata: e.target.value })} required /></label><label className="block space-y-1"><span className="text-xs font-bold">Status</span><select className="form-input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="DRAFT">DRAFT</option><option value="PUBLISHED">PUBLISHED</option></select></label><div className="flex justify-end gap-2"><button type="button" onClick={() => setIsOpen(false)} className="h-10 px-4 bg-slate-100 rounded-xl text-xs font-bold">Batal</button><button disabled={isSubmitting} className="h-10 px-5 bg-amber-600 text-white rounded-xl text-xs font-black disabled:opacity-50">{isSubmitting ? "Menyimpan..." : "Simpan"}</button></div></form></div>}
+  </div>;
+};
+
+const GenerateUmkTab = () => {
+  const year = new Date().getFullYear();
+  const [sourceYear, setSourceYear] = useState(String(year - 1));
+  const [targetYear, setTargetYear] = useState(String(year));
+  const [preview, setPreview] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const payload = { tahun_sumber: Number(sourceYear), tahun_tujuan: Number(targetYear) };
+  const check = async () => {
+    setIsLoading(true); setPreview(null);
+    try { const response = await api.client.post("/umk/rollover/preview", payload); setPreview(response.data?.data); }
+    catch (error) { toast.error(error.response?.data?.message || "Gagal membuat preview generate UMK."); }
+    finally { setIsLoading(false); }
+  };
+  const execute = async () => {
+    if (!preview?.siap_generate || !window.confirm(`Terapkan UMK ${targetYear} kepada ${preview.jumlah_petugas} petugas?`)) return;
+    setIsLoading(true);
+    try { const response = await api.client.post("/umk/rollover/execute", payload); toast.success(`${response.data?.data?.jumlah_petugas_diperbarui || 0} petugas berhasil diperbarui.`); await check(); }
+    catch (error) { toast.error(error.response?.data?.message || "Generate UMK gagal."); setIsLoading(false); }
+  };
+  return <div className="space-y-5"><div><h1 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2"><WandSparkles className="w-6 h-6 text-violet-600" /> Generate UMK Tahunan</h1><p className="text-xs text-slate-600 mt-1">Preview dan terapkan mapping UMK baru ke seluruh petugas secara transactional.</p></div><div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4"><div className="grid sm:grid-cols-2 gap-4"><label className="space-y-1"><span className="text-xs font-bold">Tahun Sumber</span><input type="number" className="form-input" value={sourceYear} onChange={(e) => { setSourceYear(e.target.value); setPreview(null); }} /></label><label className="space-y-1"><span className="text-xs font-bold">Tahun Tujuan</span><input type="number" className="form-input" value={targetYear} onChange={(e) => { setTargetYear(e.target.value); setPreview(null); }} /></label></div><button onClick={check} disabled={isLoading || sourceYear === targetYear} className="h-10 px-5 rounded-xl bg-violet-600 text-white text-xs font-black disabled:opacity-50">{isLoading ? "Memeriksa..." : "Buat Preview"}</button></div>{preview && <div className={`rounded-2xl border p-5 space-y-4 ${preview.siap_generate ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}><div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs"><div><span className="text-slate-500">UMK Sumber</span><p className="text-lg font-black">{preview.jumlah_umk_sumber}</p></div><div><span className="text-slate-500">UMK Tujuan</span><p className="text-lg font-black">{preview.jumlah_umk_tujuan}</p></div><div><span className="text-slate-500">Petugas</span><p className="text-lg font-black">{preview.jumlah_petugas}</p></div><div><span className="text-slate-500">Rata-rata</span><p className="font-black">{preview.parameter_tahunan ? rupiah.format(Number(preview.parameter_tahunan.nilai_rata_rata)) : "Belum tersedia"}</p></div></div>{!preview.siap_generate && <div className="flex gap-2 text-xs font-bold text-amber-800"><AlertTriangle className="w-4 h-4 shrink-0" /><span>Belum siap. Mapping kosong: {preview.umk_belum_dipetakan?.length || 0}, mapping ganda: {preview.id_umk_mapping_ganda?.length || 0}, parameter published: {preview.parameter_tahunan ? "ada" : "belum ada"}.</span></div>}<div className="flex justify-end"><button onClick={execute} disabled={!preview.siap_generate || isLoading} className="h-10 px-5 rounded-xl bg-emerald-600 text-white text-xs font-black disabled:opacity-50">Generate dan Terapkan</button></div></div>}</div>;
+};
+
 export const FaktorUpahPage = () => {
   const [activeTab, setActiveTab] = useState("faktor");
 
   return <div className="p-3 sm:p-6 space-y-5">
-    <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200">
+    <div className="flex flex-wrap w-fit p-1 rounded-xl bg-slate-100 border border-slate-200">
       <button type="button" onClick={() => setActiveTab("faktor")} className={`h-9 px-4 rounded-lg text-xs font-black flex items-center gap-2 transition-colors ${activeTab === "faktor" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}><Calculator className="w-4 h-4" /> KOEF &amp; TMK</button>
+      <button type="button" onClick={() => setActiveTab("parameter")} className={`h-9 px-4 rounded-lg text-xs font-black flex items-center gap-2 transition-colors ${activeTab === "parameter" ? "bg-white text-amber-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}><CalendarCog className="w-4 h-4" /> Parameter Tahunan</button>
+      <button type="button" onClick={() => setActiveTab("generate")} className={`h-9 px-4 rounded-lg text-xs font-black flex items-center gap-2 transition-colors ${activeTab === "generate" ? "bg-white text-violet-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}><WandSparkles className="w-4 h-4" /> Generate UMK</button>
       <button type="button" onClick={() => setActiveTab("upah")} className={`h-9 px-4 rounded-lg text-xs font-black flex items-center gap-2 transition-colors ${activeTab === "upah" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}><CircleDollarSign className="w-4 h-4" /> Upah Pegawai</button>
     </div>
-    {activeTab === "faktor" ? <FaktorKoefTab /> : <UpahPegawaiTab />}
+    {activeTab === "faktor" ? <FaktorKoefTab /> : activeTab === "parameter" ? <ParameterTahunanTab /> : activeTab === "generate" ? <GenerateUmkTab /> : <UpahPegawaiTab />}
   </div>;
 };

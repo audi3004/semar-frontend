@@ -153,6 +153,28 @@ const calculateCorrectedOvertimeCost = (submission, correctedHours) => {
   return (storedCost / effectiveHours) * Number(correctedHours || 0);
 };
 
+const mapSppdExpensesPayload = (expenses = []) => {
+  const grouped = {
+    transportasi: expenses.filter((item) => item.kategori === "Transportasi"),
+    akomodasi: expenses.filter((item) => item.kategori === "Akomodasi"),
+    lain_lain: expenses.filter((item) => ["Uang Harian", "Lain-lain"].includes(item.kategori))
+  };
+  const description = (items) => {
+    const value = items.map((item) => String(item.deskripsi || "").trim()).filter(Boolean).join("; ");
+    return value || null;
+  };
+  const nominal = (items) => items.reduce((sum, item) => sum + (Number(item.nominal) || 0), 0);
+
+  return {
+    rp_transportasi: nominal(grouped.transportasi),
+    desc_transportasi: description(grouped.transportasi),
+    rp_akomodasi: nominal(grouped.akomodasi),
+    desc_akomodasi: description(grouped.akomodasi),
+    rp_lain_lain: nominal(grouped.lain_lain),
+    desc_lain_lain: description(grouped.lain_lain)
+  };
+};
+
 const mapCheckerEditPayload = (type, data) => {
   if (type === "lembur") return {
     tgl_lembur: data.tanggalLembur, jam_mulai: data.jamMulai, jam_selesai: data.jamSelesai,
@@ -176,13 +198,13 @@ const mapCheckerEditPayload = (type, data) => {
     keterangan: data.diagnosaSingkat
   };
   if (type === "sppd") {
-    const total = (category) => (data.expenses || []).filter((x) => x.kategori === category)
-      .reduce((sum, x) => sum + (Number(x.nominal) || 0), 0);
     return {
-      maksud_dinas: data.maksudPerjalanan, kota_asal: data.kotaAsal, kota_tujuan: data.kotaTujuan,
-      tgl_berangkat: data.tanggalBerangkat, tgl_kembali: data.tanggalKembali,
-      rp_transportasi: total("Transportasi"), rp_akomodasi: total("Akomodasi"),
-      rp_lain_lain: total("Uang Harian") + total("Lain-lain")
+      ...(data.maksudPerjalanan !== undefined && { maksud_dinas: data.maksudPerjalanan }),
+      ...(data.kotaAsal !== undefined && { kota_asal: data.kotaAsal }),
+      ...(data.kotaTujuan !== undefined && { kota_tujuan: data.kotaTujuan }),
+      ...(data.tanggalBerangkat !== undefined && { tgl_berangkat: data.tanggalBerangkat }),
+      ...(data.tanggalKembali !== undefined && { tgl_kembali: data.tanggalKembali }),
+      ...mapSppdExpensesPayload(data.expenses)
     };
   }
   return {};
@@ -268,6 +290,7 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
   const onRefreshData = propOnRefreshData || context.onRefreshData;
 
   const selectedProject = context.selectedProject || "Semua Project";
+  const selectedUp = context.selectedUp || "Semua UP";
   const selectedUpt = context.selectedUpt || "Semua UPT";
   const selectedUltg = context.selectedUltg || "Semua ULTG";
   const selectedGi = context.selectedGi || "Semua GI";
@@ -701,20 +724,10 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
     // 3. Global unit filters from header
     const emp = (allUsers || []).find((u) => u.nip === sub.employeeNip);
     const submissionUnitId = Number(sub.id_unit || emp?.id_unit || emp?.petugas?.id_unit || 0);
-    if (!navbarScope.isAdministrator && submissionUnitId && navbarScope.allowedUnitIds?.length && !navbarScope.allowedUnitIds.includes(submissionUnitId)) {
-      return false;
-    }
-    if (navbarScope.isAdministrator && selectedUpt && selectedUpt !== "Semua UPT") {
-      const subUpt = sub.unitUpt || sub.upt || emp?.unitUpt;
-      if (subUpt && subUpt !== selectedUpt) return false;
-    }
-    if (navbarScope.isAdministrator && selectedUltg && selectedUltg !== "Semua ULTG") {
-      const subUltg = sub.unitUltg || sub.ultg || emp?.unitUltg;
-      if (subUltg && subUltg !== selectedUltg) return false;
-    }
-    if (selectedGi && selectedGi !== "Semua GI") {
-      const subGi = sub.garduInduk || sub.gi || emp?.garduInduk;
-      if (subGi && subGi !== selectedGi) return false;
+    const hasSpecificUnitFilter = [selectedUp, selectedUpt, selectedUltg, selectedGi]
+      .some((value) => value && !value.startsWith("Semua "));
+    if ((!navbarScope.isAdministrator || hasSpecificUnitFilter) && navbarScope.activeFilterUnitIds?.length) {
+      if (!submissionUnitId || !navbarScope.activeFilterUnitIds.includes(submissionUnitId)) return false;
     }
 
     const transactionDate = sub.tanggalLembur || sub.tanggalMulai || sub.tanggalBerangkat || sub.tanggalPengajuan || "";
@@ -1341,9 +1354,7 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
       setApprover2Expenses(
         sub.expenses && sub.expenses.length > 0
           ? sub.expenses.map((e) => ({ ...e, nominal: e.nominal || 0 }))
-          : [
-              { id: "exp-1", deskripsi: "Biaya Transportasi Perjalanan Dinas", kategori: "Transportasi", nominal: 0 }
-            ]
+          : []
       );
       setIsApprover2SppdModalOpen(true);
     } else {
@@ -1366,7 +1377,11 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
     try {
       const moduleApi = WORKFLOW_API[approveSub.type];
       if (!moduleApi) throw new Error("Jenis transaksi tidak didukung");
-      if (effectiveRole === "checker" && Object.keys(extra).length > 0) {
+      const shouldPersistCorrection = Object.keys(extra).length > 0 && (
+        effectiveRole === "checker"
+        || (approveSub.type === "sppd" && ["approved1", "approved2"].includes(effectiveRole))
+      );
+      if (shouldPersistCorrection) {
         const correctionPayload = mapCheckerEditPayload(approveSub.type, extra);
         if (Object.keys(correctionPayload).length > 0) {
           await moduleApi.update(approveSub.id, correctionPayload);
@@ -2471,13 +2486,15 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
         </div>
       )}
 
-      {/* Approver 2 SPPD Expense Nominal Modal */}
+      {/* Approval 1 correction / Approval 2 nominal SPPD modal */}
       {isApprover2SppdModalOpen && approveSub && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 select-none">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
               <Briefcase className="w-5 h-5 text-emerald-600" />
-              Input Nominal Biaya SPPD (Approved 2)
+              {(currentUser.role === "admin" ? approveSub.currentApproverRole : currentUser.role) === "approved1"
+                ? "Koreksi Komponen Biaya SPPD (Approval 1)"
+                : "Input Nominal Biaya SPPD (Approval 2)"}
             </h3>
 
             <div className="space-y-3 text-xs">
@@ -2486,7 +2503,9 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                 <p className="text-slate-700 font-semibold">{approveSub.maksudPerjalanan}</p>
                 <p className="text-slate-600">Rute: {approveSub.kotaAsal} &rarr; {approveSub.kotaTujuan} ({approveSub.durasiHari} Hari)</p>
                 <p className="text-emerald-800 text-[11px] font-bold pt-1 border-t border-emerald-200/60 mt-1">
-                  * Wajib memasukkan nominal rupiah untuk setiap komponen biaya SPPD yang telah ditentukan Checker.
+                  {(currentUser.role === "admin" ? approveSub.currentApproverRole : currentUser.role) === "approved1"
+                    ? "* Periksa komponen dari Checker. Hapus komponen yang tidak disetujui sebelum melanjutkan."
+                    : "* Wajib memasukkan nominal rupiah untuk setiap komponen biaya SPPD yang telah dikoreksi Approval 1."}
                 </p>
               </div>
 
@@ -2503,22 +2522,34 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                         {exp.kategori}
                       </span>
                     </div>
-                    <div className="col-span-6">
-                      <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Nominal (Rp)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={exp.nominal}
-                        onChange={(e) => {
-                          const newExp = [...approver2Expenses];
-                          newExp[idx].nominal = Number(e.target.value);
-                          setApprover2Expenses(newExp);
-                        }}
-                        required
-                        placeholder="Masukkan nominal..."
-                        className="w-full h-9 px-2 border border-emerald-300 rounded-lg bg-white font-mono font-bold text-emerald-800 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
+                    {(currentUser.role === "admin" ? approveSub.currentApproverRole : currentUser.role) === "approved1" ? (
+                      <div className="col-span-6 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setApprover2Expenses((current) => current.filter((_, itemIndex) => itemIndex !== idx))}
+                          className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-[11px]"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Hapus Komponen
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="col-span-6">
+                        <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Nominal (Rp)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={exp.nominal}
+                          onChange={(e) => {
+                            const newExp = [...approver2Expenses];
+                            newExp[idx].nominal = Number(e.target.value);
+                            setApprover2Expenses(newExp);
+                          }}
+                          required
+                          placeholder="Masukkan nominal..."
+                          className="w-full h-9 px-2 border border-emerald-300 rounded-lg bg-white font-mono font-bold text-emerald-800 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2535,8 +2566,19 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
               <button
                 type="button"
                 onClick={() => {
-                  const hasZero = approver2Expenses.some((e) => !e.nominal || Number(e.nominal) <= 0);
-                  if (hasZero) {
+                  const effectiveRole = currentUser.role === "admin" ? approveSub.currentApproverRole : currentUser.role;
+                  if (approver2Expenses.length === 0) {
+                    setAlertModal({
+                      isOpen: true,
+                      type: "error",
+                      title: "Komponen Biaya Kosong",
+                      message: "Minimal satu komponen biaya SPPD harus dipertahankan."
+                    });
+                    return;
+                  }
+                  const hasInvalidNominal = effectiveRole === "approved2"
+                    && approver2Expenses.some((e) => !e.nominal || Number(e.nominal) <= 0);
+                  if (hasInvalidNominal) {
                     setAlertModal({
                       isOpen: true,
                       type: "error",
@@ -2550,7 +2592,10 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                 }}
                 className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer"
               >
-                <Check className="w-4 h-4" /> Simpan Nominal &amp; Lanjut Tandatangan
+                <Check className="w-4 h-4" />
+                {(currentUser.role === "admin" ? approveSub.currentApproverRole : currentUser.role) === "approved1"
+                  ? "Simpan Koreksi & Lanjut Tandatangan"
+                  : "Simpan Nominal & Lanjut Tandatangan"}
               </button>
             </div>
           </div>
