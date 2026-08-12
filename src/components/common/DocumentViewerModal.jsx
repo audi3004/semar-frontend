@@ -57,7 +57,7 @@ const DocumentLetterhead = ({ label, numberLabel, dateLabel }) => (
 
       <div className="w-full sm:w-auto text-left sm:text-right text-[10px] text-slate-700 sm:border-l sm:border-[#00A2B8] sm:pl-4">
          <p className="font-extrabold text-[#075369] uppercase tracking-[0.06em]">{label}</p>
-         <p className="mt-1 font-mono text-slate-900 font-bold">{numberLabel}</p>
+         <p className="mt-1 font-mono text-slate-900 font-bold whitespace-nowrap">{numberLabel}</p>
          <p className="mt-0.5 text-[9px] text-slate-600">{dateLabel}</p>
       </div>
    </div>

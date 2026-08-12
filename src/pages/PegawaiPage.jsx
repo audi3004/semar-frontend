@@ -14,6 +14,7 @@ const emptyForm = {
   tgl_masuk: "",
   tgl_lahir: "",
   is_active: "Y"
+  ,project_ids: []
 };
 
 const dateValue = (value) => value ? String(value).slice(0, 10) : "";
@@ -25,6 +26,7 @@ export const PegawaiPage = () => {
   const [units, setUnits] = useState([]);
   const [positions, setPositions] = useState([]);
   const [umkList, setUmkList] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [unitFilter, setUnitFilter] = useState("all"); const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("nama"); const [sortOrder, setSortOrder] = useState("asc");
@@ -38,18 +40,20 @@ export const PegawaiPage = () => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [pegawaiRes, petugasRes, jabatanRes, unitRes, umkRes] = await Promise.all([
+      const [pegawaiRes, petugasRes, jabatanRes, unitRes, umkRes, projectRes] = await Promise.all([
         api.client.get("/pegawai", { params: { limit: 1000 } }),
         api.client.get("/petugas", { params: { limit: 1000 } }),
         api.client.get("/jabatan", { params: { limit: 1000 } }),
         api.client.get("/unit", { params: { limit: 1000 } }),
-        api.client.get("/umk", { params: { limit: 1000 } })
+        api.client.get("/umk", { params: { limit: 1000 } }),
+        api.client.get("/projects", { params: { limit: 1000 } })
       ]);
       setPegawai(pegawaiRes.data?.data || []);
       setPetugas(petugasRes.data?.data || []);
       setPositions(jabatanRes.data?.data || []);
       setUnits(unitRes.data?.data || []);
       setUmkList(umkRes.data?.data || []);
+      setProjects(projectRes.data?.data || []);
     } catch (error) {
       toast.error(error.response?.data?.message || "Gagal mengambil data Pegawai dan Petugas.");
     } finally {
@@ -101,6 +105,7 @@ export const PegawaiPage = () => {
       tgl_masuk: dateValue(record.tgl_masuk),
       tgl_lahir: dateValue(record.tgl_lahir),
       is_active: record.is_active || "Y"
+      ,project_ids: (record.projects || []).filter((item) => item.PegawaiProject?.is_active !== "N").map((item) => Number(item.id_project))
     });
     setFormError("");
     setIsFormOpen(true);
@@ -133,8 +138,15 @@ export const PegawaiPage = () => {
     setIsSubmitting(true);
     setFormError("");
     try {
+      let savedId = recordId;
       if (editingRecord) await api.client.put(`${endpoint}/${recordId}`, payload);
-      else await api.client.post(endpoint, payload);
+      else {
+        const saved = await api.client.post(endpoint, payload);
+        savedId = saved.data?.data?.id_pegawai || saved.data?.data?.id_petugas;
+      }
+      if (activeTab === "pegawai" && savedId) {
+        await api.client.put(`/pegawai/${savedId}/projects`, { project_ids: form.project_ids });
+      }
       toast.success(`${activeTab === "pegawai" ? "Pegawai" : "Petugas"} berhasil ${editingRecord ? "diperbarui" : "ditambahkan"}.`);
       setIsFormOpen(false);
       await loadData();
@@ -189,7 +201,7 @@ export const PegawaiPage = () => {
               <tr key={activeTab === "pegawai" ? item.id_pegawai : item.id_petugas} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-black">#{activeTab === "pegawai" ? item.id_pegawai : item.id_petugas}</td>
                 <td className="px-4 py-3 font-mono font-bold text-indigo-700">{item.nip || "-"}</td><td className="px-4 py-3 font-bold text-slate-900">{item.nama || "-"}</td>
-                <td className="px-4 py-3">{item.jabatan?.nama_jabatan || `#${item.id_jabatan}`}</td><td className="px-4 py-3">{item.jabatan?.project?.nama_project || "-"}</td><td className="px-4 py-3">{item.unit?.nama_unit || `#${item.id_unit}`}</td>
+                <td className="px-4 py-3">{item.jabatan?.nama_jabatan || `#${item.id_jabatan}`}</td><td className="px-4 py-3">{activeTab === "pegawai" ? (item.projects || []).map((project) => project.nama_project).join(", ") || "-" : item.jabatan?.project?.nama_project || "-"}</td><td className="px-4 py-3">{item.unit?.nama_unit || `#${item.id_unit}`}</td>
                 {activeTab === "petugas" && <td className="px-4 py-3">{item.umk?.nama_umk || item.umk?.kab_kota || (item.id_umk ? `#${item.id_umk}` : "-")}</td>}
                 <td className="px-4 py-3">{dateValue(item.tgl_masuk) || "-"}</td><td className="px-4 py-3">{dateValue(item.tgl_lahir) || "-"}</td>
                 <td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-full font-bold ${item.is_active === "N" ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{item.is_active === "N" ? "Nonaktif" : "Aktif"}</span></td>
@@ -216,6 +228,7 @@ export const PegawaiPage = () => {
               <Field label="Nama" required><input value={form.nama} onChange={(e) => updateForm("nama", e.target.value)} className="form-input" required /></Field>
               <Field label="Jabatan" required><select value={form.id_jabatan} onChange={(e) => updateForm("id_jabatan", e.target.value)} className="form-input" required><option value="">Pilih jabatan</option>{positions.map((item) => <option key={item.id_jabatan} value={item.id_jabatan}>{item.nama_jabatan}</option>)}</select></Field>
               <Field label="Unit" required><select value={form.id_unit} onChange={(e) => updateForm("id_unit", e.target.value)} className="form-input" required><option value="">Pilih unit</option>{units.map((item) => <option key={item.id_unit} value={item.id_unit}>{item.nama_unit}</option>)}</select></Field>
+              {activeTab === "pegawai" && <div className="sm:col-span-2"><span className="block text-xs font-bold text-slate-700 mb-2">Project workflow</span><div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl border border-slate-200 p-3">{projects.map((project) => <label key={project.id_project} className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={form.project_ids.includes(Number(project.id_project))} onChange={(event) => updateForm("project_ids", event.target.checked ? [...form.project_ids, Number(project.id_project)] : form.project_ids.filter((id) => id !== Number(project.id_project)))} />{project.nama_project}</label>)}{projects.length === 0 && <span className="text-xs text-slate-500">Belum ada project aktif.</span>}</div></div>}
               {activeTab === "petugas" && <Field label="UMK"><select value={form.id_umk} onChange={(e) => updateForm("id_umk", e.target.value)} className="form-input"><option value="">Tanpa UMK</option>{umkList.map((item) => <option key={item.id_umk} value={item.id_umk}>{item.nama_umk || item.kab_kota || `UMK #${item.id_umk}`}</option>)}</select></Field>}
               <Field label="Tanggal Masuk" required><input type="date" value={form.tgl_masuk} onChange={(e) => updateForm("tgl_masuk", e.target.value)} className="form-input" required /></Field>
               <Field label="Tanggal Lahir"><input type="date" value={form.tgl_lahir} onChange={(e) => updateForm("tgl_lahir", e.target.value)} className="form-input" /></Field>

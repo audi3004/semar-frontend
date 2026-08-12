@@ -10,7 +10,7 @@ import {
 import QRCode from "qrcode";
 import {
    formatRupiah,
-   formatDateIndonesian,
+   formatDateIndonesianLong as formatDateIndonesian,
    getStatusLabel,
    getFormattedDocNo,
 } from "../../utils/formatters";
@@ -664,7 +664,7 @@ const PdfDocumentLetterhead = ({ documentLabel, documentNumber, documentDate, fi
       </View>
       <View style={styles.headerRight}>
          <Text style={styles.docLabel}>{documentLabel}</Text>
-         <Text style={styles.docNo}>No: {documentNumber}</Text>
+         <Text style={styles.docNo} wrap={false}>No: {documentNumber}</Text>
          <Text style={styles.docDate}>Tgl Pengajuan: {documentDate}</Text>
       </View>
    </View>

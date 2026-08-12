@@ -5,9 +5,55 @@ const ROLE_MAP = {
   CHECKER: "checker",
   VERIFICATION: "verification",
   APPROVAL_1: "approved1",
+  APPROVAL1: "approved1",
+  APPROVED1: "approved1",
   APPROVAL_2: "approved2",
-  APPROVAL_3: "approved3"
+  APPROVAL2: "approved2",
+  APPROVED2: "approved2",
+  APPROVAL_3: "approved3",
+  APPROVAL3: "approved3",
+  APPROVED3: "approved3"
 };
+
+const SIGNATURE_FIELDS = {
+  checker: "checker_signature",
+  verification: "verification_signature",
+  approved1: "approval_1_signature",
+  approved2: "approval_2_signature",
+  approved3: "approval_3_signature"
+};
+
+const ROLE_LABELS = {
+  checker: "TL PLN (Checker)",
+  verification: "AMN PLN (Verifikasi)",
+  approved1: "MAN PLN (Approved 1)",
+  approved2: "TL ES (Approved 2)",
+  approved3: "AMN ES (Approved 3)"
+};
+
+const normalizeRole = (code) => ROLE_MAP[String(code || "").toUpperCase()] || "";
+
+const buildApprovalSteps = (item, workflowHistory) =>
+  Object.keys(SIGNATURE_FIELDS).map((role) => {
+    const log = [...workflowHistory].reverse().find((entry) =>
+      normalizeRole(entry.createdBy?.role?.kode_role) === role &&
+      ["NEXT", "REJECT"].includes(String(entry.aksi || "").toUpperCase())
+    );
+    const identity = log?.createdBy?.pegawai || log?.createdBy?.petugas;
+    const signatureUrl = resolveBackendFileUrl(item[SIGNATURE_FIELDS[role]]);
+    const action = String(log?.aksi || "").toUpperCase();
+
+    return {
+      role,
+      roleLabel: ROLE_LABELS[role],
+      status: action === "REJECT" ? "rejected" : (log || signatureUrl ? "approved" : "pending"),
+      actionByName: identity?.nama || log?.createdBy?.username || "",
+      actionByNip: identity?.nip || "",
+      actionDate: log?.created_at || "",
+      notes: log?.keterangan || "",
+      signatureUrl
+    };
+  });
 
 const workflowRole = (item) =>
   ROLE_MAP[String(item.status?.role?.kode_role || "").toUpperCase()] || "maker";
@@ -30,9 +76,15 @@ const common = (item, type, id) => {
     (entry) => String(entry.aksi || "").toUpperCase() === "REVISION"
   );
   const directUnit = item.petugas?.unit;
-  const parentUnit = directUnit?.indukUnit;
-  const rootUnit = parentUnit?.indukUnit;
-  const unitHierarchy = [directUnit, parentUnit, rootUnit]
+  const unitNodes = [];
+  const visitedUnitIds = new Set();
+  let currentUnit = directUnit;
+  while (currentUnit && !visitedUnitIds.has(currentUnit.id_unit)) {
+    visitedUnitIds.add(currentUnit.id_unit);
+    unitNodes.push(currentUnit);
+    currentUnit = currentUnit.indukUnit;
+  }
+  const unitHierarchy = unitNodes
     .filter(Boolean)
     .map((unit) => ({ id: unit.id_unit, name: unit.nama_unit }));
   const findUnitName = (pattern, fallback = "") =>
@@ -49,12 +101,13 @@ const common = (item, type, id) => {
     employeeJabatan: item.petugas?.jabatan?.nama_jabatan || "-",
     id_unit: item.petugas?.id_unit ?? item.petugas?.unit?.id_unit,
     unitHierarchy,
-    unitUpt: findUnitName(/\b(UP|UPT|UNIT PELAKSANA)\b/i, rootUnit?.nama_unit || directUnitName),
-    unitUltg: findUnitName(/\bULTG\b/i, parentUnit?.nama_unit || ""),
-    garduInduk: findUnitName(/\b(GI|GARDU INDUK)\b/i, directUnitName),
+    unitUpt: findUnitName(/\b(UP|UPT|UNIT PELAKSANA)\b/i),
+    unitUltg: findUnitName(/\bULTG\b/i),
+    garduInduk: findUnitName(/\b(GI|GARDU INDUK)\b/i),
     status: workflowStatus(item),
     currentApproverRole: workflowRole(item),
     workflowHistory,
+    approvalSteps: buildApprovalSteps(item, workflowHistory),
     revisionNote: latestRevision?.keterangan || "",
     revisionDate: latestRevision?.created_at || "",
     revisionBy: latestRevision?.createdBy?.username || ""
