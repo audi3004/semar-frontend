@@ -29,6 +29,7 @@ import { ExportService } from "../services/exportService";
 import { PdfService } from "../services/pdfService";
 import { DataService } from "../services/dataService";
 import { DocumentViewerModal } from "../components/common/DocumentViewerModal";
+import { SignatureModal } from "../components/common/SignatureModal";
 import { LoadingSkeleton } from "../components/common/LoadingSkeleton";
 import { motion, AnimatePresence } from "motion/react";
 import { api } from "../services/api";
@@ -37,7 +38,7 @@ import { mapWorkflowSubmission } from "../utils/workflowSubmissionMapper";
 const DEFAULT_SIGNATORIES = DataService.getDefaultReportSignatories("UPT Semarang");
 
 export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
-  const [selectedMonth, setSelectedMonth] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
   const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   const [selectedType, setSelectedType] = useState("all");
   const [selectedUnit, setSelectedUnit] = useState("all");
@@ -49,6 +50,13 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   const [isLoadingReport, setIsLoadingReport] = useState(true);
   const [reportError, setReportError] = useState("");
   const [reportUsers, setReportUsers] = useState([]);
+  const [reportUnits, setReportUnits] = useState([]);
+  const [reportDocument, setReportDocument] = useState(null);
+  const [isSignatureOpen, setIsSignatureOpen] = useState(false);
+  const normalizedRole = String(currentUser?.kode_role || currentUser?.role || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const isChecker = normalizedRole === "CHECKER";
+  const isApproval1 = ["APPROVAL1", "APPROVED1"].includes(normalizedRole);
+  const isApproval2 = ["APPROVAL2", "APPROVED2"].includes(normalizedRole);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -64,19 +72,19 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
       setIsLoadingReport(true);
       setReportError("");
       try {
-        const year = selectedYear !== "all" ? Number(selectedYear) : null;
-        const month = selectedMonth !== "all" ? Number(selectedMonth) : null;
-        const lastDay = year && month ? new Date(year, month, 0).getDate() : null;
         const params = {
+          year: Number(selectedYear),
+          month: Number(selectedMonth),
           type: selectedType,
+          id_unit: selectedUnit !== "all" ? Number(selectedUnit) : undefined,
           search: searchQuery.trim() || undefined,
-          start_date: year ? `${year}-${String(month || 1).padStart(2, "0")}-01` : undefined,
-          end_date: year ? `${year}-${String(month || 12).padStart(2, "0")}-${String(lastDay || 31).padStart(2, "0")}` : undefined,
         };
         const result = await api.getReportPermohonan(params);
         if (!active) return;
         setReportSubmissions((result.transactions || []).map(mapWorkflowSubmission));
         setReportSummary(result.summary || {});
+        setReportUnits(Array.isArray(result.units) ? result.units : []);
+        setReportDocument(result.report || null);
       } catch (error) {
         if (!active) return;
         setReportSubmissions([]);
@@ -90,12 +98,16 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
       active = false;
       clearTimeout(timeout);
     };
-  }, [currentUser, selectedMonth, selectedYear, selectedType, searchQuery]);
+  }, [currentUser, selectedMonth, selectedYear, selectedType, selectedUnit, searchQuery]);
+
+  useEffect(() => {
+    if (selectedUnit === "all" && reportUnits.length === 1) setSelectedUnit(String(reportUnits[0].id_unit));
+  }, [reportUnits, selectedUnit]);
 
   // Auto increment sequence for document number (001, 002, ...)
   const [docSeq, setDocSeq] = useState(() => {
     try {
-      const saved = localStorage.getItem("epresensi_rekap_doc_seq");
+      const saved = globalThis.appStorage.getItem("epresensi_rekap_doc_seq");
       return saved ? parseInt(saved, 10) || 1 : 1;
     } catch {
       return 1;
@@ -125,69 +137,19 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
 
   // Compute available Unit/UPT groups for dropdown rendering based on scope
   const availableUnitGroups = useMemo(() => {
-    const names = [...new Set(reportSubmissions.flatMap((submission) =>
-      (submission.unitHierarchy || []).map((unit) => unit.name).filter(Boolean)
-    ))].sort((a, b) => a.localeCompare(b, "id"));
-    return names.length ? [{
-      label: "Unit Tersedia dari Server",
-      options: names.map((name) => ({ value: name, label: name })),
+    return reportUnits.length ? [{
+      label: "Gardu Induk dalam lingkup Anda",
+      options: reportUnits.map((unit) => ({ value: String(unit.id_unit), label: unit.nama_unit })),
     }] : [];
-
-    /* Legacy fallback retained only for reference data migration. */
-    const allGroups = [
-      {
-        label: "UPT Semarang",
-        options: [
-          { value: "UPT Semarang", label: "Seluruh UPT Semarang" },
-          { value: "ULTG Semarang", label: "ULTG Semarang" },
-          { value: "ULTG Kudus", label: "ULTG Kudus" },
-          { value: "GI Krapyak", label: "GI Krapyak" },
-          { value: "GI Ungaran", label: "GI Ungaran" },
-          { value: "GI Srondol", label: "GI Srondol" }
-        ]
-      },
-      {
-        label: "UPT Purwokerto",
-        options: [
-          { value: "UPT Purwokerto", label: "Seluruh UPT Purwokerto" },
-          { value: "ULTG Purwokerto", label: "ULTG Purwokerto" },
-          { value: "GI Kalisari", label: "GI Kalisari" }
-        ]
-      },
-      {
-        label: "UPT Surakarta",
-        options: [
-          { value: "UPT Surakarta", label: "Seluruh UPT Surakarta" },
-          { value: "ULTG Surakarta", label: "ULTG Surakarta" },
-          { value: "GI Pedan", label: "GI Pedan" }
-        ]
-      },
-      {
-        label: "UPT Salatiga",
-        options: [
-          { value: "UPT Salatiga", label: "Seluruh UPT Salatiga" },
-          { value: "ULTG Salatiga", label: "ULTG Salatiga" },
-          { value: "GI Tuntang", label: "GI Tuntang" },
-          { value: "GI Bawen", label: "GI Bawen" }
-        ]
-      }
-    ];
-
-    if (!userUnitScope) {
-      return allGroups;
-    }
-
-    const normalizedScope = userUnitScope.toLowerCase();
-    return allGroups.filter(g => g.label.toLowerCase().includes(normalizedScope) || normalizedScope.includes(g.label.toLowerCase()));
-  }, [userUnitScope, reportSubmissions]);
+  }, [reportUnits]);
 
   // Scope utama berasal dari Navbar melalui daftar submissions yang sudah terfilter.
   // Filter unit di halaman ini bersifat tambahan dan tidak dipaksa saat halaman dibuka.
 
-  // Load saved signatories from localStorage on mount
+  // Load saved signatories from globalThis.appStorage on mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("epresensi_report_signatories");
+      const saved = globalThis.appStorage.getItem("epresensi_report_signatories");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
@@ -343,7 +305,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
       }
 
       // Unit Filter per UPT Grouping
-      if (selectedUnit !== "all") {
+      if (selectedUnit !== "all" && !/^\d+$/.test(selectedUnit)) {
         const u = [
           sub.unitUpt,
           sub.unitUltg,
@@ -418,7 +380,6 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   }, [filteredSubmissions]);
 
   const monthNames = [
-    { value: "all", label: "Semua Bulan" },
     { value: "1", label: "Januari" },
     { value: "2", label: "Februari" },
     { value: "3", label: "Maret" },
@@ -433,12 +394,10 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
     { value: "12", label: "Desember" }
   ];
 
-  const effectiveUnit = selectedUnit !== "all" 
-    ? selectedUnit 
-    : (currentUser?.unitUpt || "UPT Semarang");
+  const effectiveUnit = reportUnits.find((unit) => String(unit.id_unit) === selectedUnit)?.nama_unit || "Pilih GI";
 
   const filterInfo = {
-    periode: `${selectedMonth === "all" ? "Semua Bulan" : monthNames.find((m) => m.value === selectedMonth)?.label} ${selectedYear}`,
+    periode: `${monthNames.find((m) => m.value === selectedMonth)?.label} ${selectedYear}`,
     type: selectedType === "all" ? "Semua Jenis" : selectedType,
     unit: effectiveUnit,
     unitUpt: currentUser?.unitUpt || effectiveUnit,
@@ -447,6 +406,11 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
     docSeq,
     summary: reportSummary
   };
+
+  const reportSignatories = reportDocument ? [
+    { title: "DIPERIKSA OLEH", role: "Checker", name: reportDocument.checker?.name, nip: reportDocument.checker?.nip, jabatan: reportDocument.checker?.jabatan, signature: reportDocument.checker_signature, signatureUrl: reportDocument.checker_signature },
+    { title: "DISETUJUI OLEH", role: "Approval 1", name: reportDocument.approval1?.name, nip: reportDocument.approval1?.nip, jabatan: reportDocument.approval1?.jabatan, signature: reportDocument.approval_1_signature, signatureUrl: reportDocument.approval_1_signature },
+  ] : [];
 
   // Check if selected period is completed (periode yang sudah selesai) vs ongoing (periode yang sedang berlangsung)
   const isPeriodCompleted = useMemo(() => {
@@ -472,15 +436,41 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   }, [selectedMonth, selectedYear]);
 
   const handleOpenExportModal = (format) => {
-    if (format === "pdf" && !isPeriodCompleted) {
+    if (!isPeriodCompleted) {
       setSuccessNotification(
         "Generate PDF Laporan hanya dapat dilakukan untuk periode yang telah selesai (bulan/tahun yang sudah berlalu). Periode yang sedang berlangsung tidak dapat di-generate."
       );
       setTimeout(() => setSuccessNotification(null), 6000);
       return;
     }
-    setExportFormat(format);
-    setIsSignatoryModalOpen(true);
+    if (!reportDocument?.fully_signed) {
+      setSuccessNotification("PDF dan Excel baru dapat diekspor setelah Checker dan Approval 1 menandatangani report.");
+      return;
+    }
+    handleExecuteExport(format);
+  };
+
+  const handleCreateReport = async () => {
+    if (!isChecker || selectedUnit === "all") return;
+    setIsExporting(true);
+    setReportError("");
+    try {
+      const report = await api.createReportPermohonan({ year: Number(selectedYear), month: Number(selectedMonth), id_unit: Number(selectedUnit) });
+      setReportDocument(report);
+      setSuccessNotification(`Report ${report.nomor_dokumen} berhasil dibuat. Silakan bubuhkan tanda tangan Checker.`);
+    } catch (error) {
+      setReportError(error.response?.data?.message || "Gagal membuat report.");
+    } finally { setIsExporting(false); }
+  };
+
+  const handleSaveReportSignature = async (signature) => {
+    try {
+      const report = await api.signReportPermohonan(reportDocument.id_report_permohonan, signature);
+      setReportDocument(report);
+      setSuccessNotification(isChecker ? "Tanda tangan Checker tersimpan. Report menunggu Approval 1." : "Report sudah ditandatangani lengkap dan siap diekspor.");
+    } catch (error) {
+      setReportError(error.response?.data?.message || "Gagal menyimpan tanda tangan.");
+    }
   };
 
   const handleOpenPreviewModal = () => {
@@ -523,14 +513,14 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
     const unitTarget = selectedUnit !== "all" ? selectedUnit : userUnitScope || "UPT Semarang";
     const freshDefaults = DataService.getDefaultReportSignatories(unitTarget);
     setSignatories(freshDefaults);
-    localStorage.removeItem("epresensi_report_signatories");
+    globalThis.appStorage.removeItem("epresensi_report_signatories");
     setSuccessNotification("Pejabat Penandatangan di-reset ke data default (Checker & Approval 1).");
     setTimeout(() => setSuccessNotification(null), 3000);
   };
 
   const handleSaveSignatoriesOnly = () => {
     try {
-      localStorage.setItem("epresensi_report_signatories", JSON.stringify(signatories));
+      globalThis.appStorage.setItem("epresensi_report_signatories", JSON.stringify(signatories));
       setSuccessNotification("Susunan Pejabat Penandatangan (Non-Maker) berhasil disimpan!");
       setTimeout(() => setSuccessNotification(null), 4000);
     } catch (err) {
@@ -538,34 +528,21 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
     }
   };
 
-  const handleExecuteExport = async () => {
-    if (exportFormat === "pdf" && !isPeriodCompleted) {
-      alert("Generate PDF hanya dapat dilakukan untuk periode yang sudah selesai.");
-      return;
-    }
+  const handleExecuteExport = async (requestedFormat = exportFormat) => {
     setIsExporting(true);
     try {
-      localStorage.setItem("epresensi_report_signatories", JSON.stringify(signatories));
-
-      const currentSeq = docSeq;
-      const currentFilterInfo = { ...filterInfo, docSeq: currentSeq };
-
-      if (exportFormat === "pdf") {
-        await PdfService.downloadReportPdf(filteredSubmissions, currentFilterInfo, signatories);
+      const exportReport = await api.getReportPermohonanExport(reportDocument.id_report_permohonan);
+      const exportSubmissions = (exportReport.snapshot?.transactions || []).map(mapWorkflowSubmission);
+      const currentFilterInfo = { ...filterInfo, docSeq: exportReport.nomor_urut, nomorDokumen: exportReport.nomor_dokumen };
+      if (requestedFormat === "pdf") {
+        await PdfService.downloadReportPdf(exportSubmissions, currentFilterInfo, reportSignatories);
       } else {
-        ExportService.exportReportToExcel(filteredSubmissions, currentFilterInfo, signatories);
+        ExportService.exportReportToExcel(exportSubmissions, currentFilterInfo, reportSignatories, `Report_Permohonan_${exportReport.nomor_dokumen.replace(/\//g, "-")}.xlsx`);
       }
-
-      // Auto-increment sequence for next document
-      const nextSeq = currentSeq + 1;
-      setDocSeq(nextSeq);
-      localStorage.setItem("epresensi_rekap_doc_seq", String(nextSeq));
-
-      setIsSignatoryModalOpen(false);
-      setSuccessNotification(`Dokumen Laporan ${exportFormat.toUpperCase()} (#${String(currentSeq).padStart(3, "0")}) berhasil di-generate dengan susunan 3 Pejabat Penandatangan.`);
+      setSuccessNotification(`Dokumen ${exportReport.nomor_dokumen} berhasil diekspor ke ${requestedFormat.toUpperCase()}.`);
       setTimeout(() => setSuccessNotification(null), 5000);
     } catch (err) {
-      console.error("Failed exporting report:", err);
+      setReportError(err.response?.data?.message || "Gagal mengekspor report.");
     } finally {
       setIsExporting(false);
     }
@@ -629,31 +606,38 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
               <span>Periode Sedang Berlangsung</span>
             </span>
           )}
-          <button
-            onClick={handleOpenPreviewModal}
-            disabled={isLoadingReport}
-            className="flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-md shadow-sky-600/20 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Pratinjau tampilan ReportPdfDocument.jsx untuk periode saat ini"
-          >
-            <Eye className="w-4 h-4 text-sky-200" />
-            <span>Preview Periode Saat Ini</span>
+          {isChecker && isPeriodCompleted && !reportDocument && (
+            <button onClick={handleCreateReport} disabled={isExporting || selectedUnit === "all"} className="flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md transition cursor-pointer disabled:opacity-50">
+              <FileText className="w-4 h-4" /><span>Buat Nomor Report</span>
+            </button>
+          )}
+          {reportDocument && ((isChecker && !reportDocument.checker_signature) || (isApproval1 && reportDocument.checker_signature && !reportDocument.approval_1_signature)) && (
+            <button onClick={() => setIsSignatureOpen(true)} className="flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
+              <PenTool className="w-4 h-4" /><span>Tanda Tangani Report</span>
+            </button>
+          )}
+          {reportDocument && isApproval1 && !reportDocument.checker_signature && (
+            <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-3 py-2 rounded-xl border border-amber-200">Menunggu tanda tangan Checker</span>
+          )}
+          <button onClick={() => handleOpenExportModal("excel")} disabled={isExporting || !reportDocument?.fully_signed} className="flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+            <FileSpreadsheet className="w-4 h-4" /><span>Export Excel (.xlsx)</span>
           </button>
           <button
             onClick={() => handleOpenExportModal("pdf")}
-            disabled={isExporting || isLoadingReport || !isPeriodCompleted}
+            disabled={isExporting || isLoadingReport || !reportDocument?.fully_signed}
             title={
-              !isPeriodCompleted
+              !reportDocument?.fully_signed
                 ? "Generate PDF hanya dapat dilakukan untuk periode yang sudah selesai"
                 : "Generate PDF Laporan"
             }
             className={`flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50 ${
-              !isPeriodCompleted
+              !reportDocument?.fully_signed
                 ? "bg-slate-200 text-slate-400 border border-slate-300 shadow-none cursor-not-allowed"
                 : "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20 cursor-pointer"
             }`}
           >
             <FileText className="w-4 h-4" />
-            <span>Generate PDF (.pdf)</span>
+            <span>Export PDF (.pdf)</span>
           </button>
         </div>
       </div>
@@ -745,9 +729,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
               onChange={(e) => setSelectedYear(e.target.value)}
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer"
             >
-              <option value="all">Semua Tahun</option>
-              <option value="2026">2026</option>
-              <option value="2025">2025</option>
+              {Array.from({ length: 6 }, (_, index) => String(new Date().getFullYear() - index)).map((year) => <option key={year} value={year}>{year}</option>)}
             </select>
           </div>
 
@@ -770,17 +752,13 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
 
           {/* Unit Filter - Grouped per UPT */}
           <div>
-            <label className="block font-bold text-slate-700 mb-1">Grup Unit Kerja / UPT</label>
+            <label className="block font-bold text-slate-700 mb-1">Gardu Induk (GI)</label>
             <select
               value={selectedUnit}
               onChange={(e) => setSelectedUnit(e.target.value)}
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer"
             >
-              {userUnitScope ? (
-                <option value={userUnitScope}>-- Semua Unit di {userUnitScope} --</option>
-              ) : (
-                <option value="all">-- Semua Unit (Seluruh UPT) --</option>
-              )}
+              <option value="all">-- Pilih GI --</option>
               {availableUnitGroups.map((group) => (
                 <optgroup key={group.label} label={group.label}>
                   {group.options.map((opt) => (
@@ -806,6 +784,32 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
           />
         </div>
       </div>
+
+      {reportDocument && (
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Nomor Dokumen Report</p>
+              <p className="font-mono font-black text-slate-900 mt-1">{reportDocument.nomor_dokumen}</p>
+            </div>
+            <span className={`text-[11px] font-bold px-3 py-1.5 rounded-full border ${reportDocument.fully_signed ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+              {reportDocument.fully_signed ? "Ditandatangani Lengkap" : "Proses Tanda Tangan"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {reportSignatories.map((signer, index) => (
+              <div key={signer.role} className={`rounded-2xl border-2 p-4 text-center ${signer.signature ? "border-emerald-200 bg-emerald-50/40" : "border-dashed border-slate-200 bg-slate-50"}`}>
+                <p className="text-[10px] font-black tracking-widest text-slate-500">{signer.title}</p>
+                <div className="h-20 flex items-center justify-center">
+                  {signer.signature ? <img src={signer.signature} alt={`Tanda tangan ${signer.role}`} className="max-h-16 max-w-[220px] mix-blend-multiply" /> : <span className="text-xs font-bold text-slate-400">{index === 1 && !reportDocument.checker_signature ? "Menunggu Checker" : "Belum ditandatangani"}</span>}
+                </div>
+                <p className="font-bold text-sm text-slate-900">{signer.name || "-"}</p>
+                <p className="text-[10px] text-slate-500">NIP. {signer.nip || "-"} · {signer.jabatan || "-"}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
@@ -834,7 +838,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
                 <th className="py-3 px-4">Ringkasan Detail</th>
                 <th className="py-3 px-4 text-right">Estimasi Biaya</th>
                 <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-center">Aksi</th>
+                {!isApproval2 && <th className="py-3 px-4 text-center">Aksi</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -890,12 +894,12 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
                       <td className="py-3.5 px-4 text-right font-black text-slate-900 whitespace-nowrap font-mono">
                         {nominal}
                       </td>
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                      {!isApproval2 && <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
                           <CheckCircle className="w-3 h-3 text-emerald-600" />
                           Approved 3
                         </span>
-                      </td>
+                      </td>}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <button
                           onClick={() => setSelectedDocSub(sub)}
@@ -1124,7 +1128,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
         isReport={true}
         reportSubmissions={filteredSubmissions}
         reportFilterInfo={{ ...filterInfo, docSeq }}
-        reportSignatories={signatories}
+        reportSignatories={reportSignatories}
         isPeriodCompleted={isPeriodCompleted}
       />
 
@@ -1136,6 +1140,13 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
           onClose={() => setSelectedDocSub(null)}
         />
       )}
+      <SignatureModal
+        isOpen={isSignatureOpen}
+        onClose={() => setIsSignatureOpen(false)}
+        onSave={handleSaveReportSignature}
+        title={`Tanda Tangan ${isChecker ? "Checker" : "Approval 1"}`}
+        saveButtonText="Simpan Tanda Tangan Report"
+      />
     </div>
   );
 };

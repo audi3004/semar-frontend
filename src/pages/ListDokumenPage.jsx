@@ -15,13 +15,16 @@ import {
   Briefcase,
   Stethoscope,
   FileCheck2,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from "lucide-react";
 import { DocumentViewerModal } from "../components/common/DocumentViewerModal";
 import { PdfService } from "../services/pdfService";
 import { AuthService } from "../services/authService";
 import { MasterDataService } from "../services/masterDataService";
 import { formatDateIndonesian, getFormattedDocNo } from "../utils/formatters";
+import { api } from "../services/api";
+import { mapWorkflowSubmission } from "../utils/workflowSubmissionMapper";
 
 // Fallback Mock Approved Data if submissions prop is empty or has few approved docs
 const FALLBACK_APPROVED_SUBMISSIONS = [
@@ -184,18 +187,31 @@ export const ListDokumenPage = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
-  const [startDate, setStartDate] = useState(globalStartDate || "");
-  const [endDate, setEndDate] = useState(globalEndDate || "");
   const [downloadingId, setDownloadingId] = useState(null);
+  const [serverDocuments, setServerDocuments] = useState([]);
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(true);
+  const [documentsError, setDocumentsError] = useState("");
 
-  // Sync date states if top header filter changes
-  useEffect(() => {
-    if (globalStartDate !== undefined) setStartDate(globalStartDate);
-  }, [globalStartDate]);
+  const loadDocuments = async () => {
+    setIsLoadingDocuments(true);
+    setDocumentsError("");
+    try {
+      const rows = await api.getCompletedDocuments({
+        start_date: globalStartDate || undefined,
+        end_date: globalEndDate || undefined
+      });
+      setServerDocuments((Array.isArray(rows) ? rows : []).map(mapWorkflowSubmission));
+    } catch (error) {
+      setServerDocuments([]);
+      setDocumentsError(error.response?.data?.message || "Gagal mengambil daftar dokumen dari server.");
+    } finally {
+      setIsLoadingDocuments(false);
+    }
+  };
 
   useEffect(() => {
-    if (globalEndDate !== undefined) setEndDate(globalEndDate);
-  }, [globalEndDate]);
+    if (currentUser) loadDocuments();
+  }, [currentUser?.id_user, globalStartDate, globalEndDate]);
 
   // Detail Modal State
   const [viewingDoc, setViewingDoc] = useState(null);
@@ -223,6 +239,7 @@ export const ListDokumenPage = ({
   const getDocProjectName = (doc, validUsers) => {
     if (doc.projectName) return doc.projectName;
     if (doc.nama_project) return doc.nama_project;
+    if (doc.petugas?.jabatan?.project?.nama_project) return doc.petugas.jabatan.project.nama_project;
     const employee = (validUsers || []).find((u) => u.nip === doc.employeeNip);
     if (employee) {
       if (employee.multiProject && Array.isArray(employee.multiProject) && employee.multiProject.length > 0) {
@@ -265,65 +282,14 @@ export const ListDokumenPage = ({
 
   // 1. Filter Approved Submissions
   const allApproved = useMemo(() => {
-    // Get existing valid user profiles from master pegawai / users
-    const validUsers = AuthService.getUsers() || [];
-    const validNips = new Set(validUsers.map((u) => u.nip));
-
-    // Filter prop submissions to only include existing employees
-    const fromProps = (submissions || []).filter(
-      (s) => (s?.status === "APPROVED" || s?.status === "approved") && validNips.has(s?.employeeNip)
-    );
-
-    // Combine with fallback data but dynamically mapped/filtered to guarantee existing employees only
-    const combined = [...fromProps];
-    FALLBACK_APPROVED_SUBMISSIONS.forEach((fb) => {
-      if (validNips.has(fb.employeeNip)) {
-        if (!combined.some((item) => item.id === fb.id || item.docNo === fb.docNo)) {
-          const realUser = validUsers.find((u) => u.nip === fb.employeeNip);
-          combined.push({
-            ...fb,
-            employeeName: realUser ? realUser.name : fb.employeeName,
-            employeeJabatan: realUser ? realUser.jabatan : fb.employeeJabatan,
-            unitUpt: realUser ? realUser.unitUpt : fb.unitUpt,
-            unitUltg: realUser ? realUser.unitUltg : fb.unitUltg,
-            garduInduk: realUser ? realUser.garduInduk : fb.garduInduk,
-          });
-        }
-      } else {
-        // If the dummy NIP does not exist in master pegawai, dynamically bind it to an existing Maker employee!
-        const makerUsers = validUsers.filter((u) => u.role === "maker");
-        if (makerUsers.length > 0) {
-          const hashIndex = fb.id.charCodeAt(fb.id.length - 1) % makerUsers.length;
-          const realUser = makerUsers[hashIndex];
-          if (!combined.some((item) => item.id === fb.id || item.docNo === fb.docNo)) {
-            combined.push({
-              ...fb,
-              employeeNip: realUser.nip,
-              employeeName: realUser.name,
-              employeeJabatan: realUser.jabatan,
-              unitUpt: realUser.unitUpt,
-              unitUltg: realUser.unitUltg,
-              garduInduk: realUser.garduInduk,
-            });
-          }
-        }
-      }
-    });
-    return combined;
-  }, [submissions]);
+    return serverDocuments.filter((item) => String(item.status).toLowerCase() === "approved");
+  }, [serverDocuments]);
 
   // 2. Filter by Project, Unit, Date Range, Category, and Search
   const filteredSubmissions = useMemo(() => {
     const validUsers = AuthService.getUsers() || [];
 
     return allApproved.filter((doc) => {
-      // User Role Tenant Scoping
-      if (currentUser?.role && currentUser.role !== "admin" && currentUser.role !== "approved3") {
-        if (currentUser.unitUpt && doc.unitUpt && doc.unitUpt !== currentUser.unitUpt) {
-          return false;
-        }
-      }
-
       // Category Filter
       if (selectedCategory !== "ALL" && doc.type !== selectedCategory) {
         return false;
@@ -347,13 +313,6 @@ export const ListDokumenPage = ({
       if (selectedGi && selectedGi !== "Semua GI") {
         const docGi = doc.garduInduk || doc.gi || "";
         if (docGi && docGi !== selectedGi) return false;
-      }
-
-      // Date Range Filter
-      const docDateStr = getDocDateString(doc);
-      if (docDateStr) {
-        if (startDate && docDateStr < startDate) return false;
-        if (endDate && docDateStr > endDate) return false;
       }
 
       // Search Filter
@@ -391,8 +350,6 @@ export const ListDokumenPage = ({
     selectedUpt,
     selectedUltg,
     selectedGi,
-    startDate,
-    endDate,
     searchQuery,
     currentUser,
     masterJabatans,
@@ -434,7 +391,7 @@ export const ListDokumenPage = ({
       await PdfService.downloadPdf(doc);
     } catch (err) {
       console.error("Gagal mengunduh PDF:", err);
-      alert("Terjadi kesalahan saat membuat file PDF.");
+      alert(err?.message || "Terjadi kesalahan saat membuat file PDF.");
     } finally {
       setDownloadingId(null);
     }
@@ -562,38 +519,10 @@ export const ListDokumenPage = ({
               </select>
             </div>
 
-            {/* Date Range Start */}
-            <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs">
-              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                title="Tanggal Awal"
-              />
-            </div>
-
-            <span className="text-xs font-bold text-slate-400 hidden sm:inline">s/d</span>
-
-            {/* Date Range End */}
-            <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs">
-              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                title="Tanggal Akhir"
-              />
-            </div>
-
-            {(selectedCategory !== "ALL" || startDate || endDate || searchQuery) && (
+            {(selectedCategory !== "ALL" || searchQuery) && (
               <button
                 onClick={() => {
                   setSelectedCategory("ALL");
-                  setStartDate("");
-                  setEndDate("");
                   setSearchQuery("");
                 }}
                 className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1"
@@ -609,7 +538,19 @@ export const ListDokumenPage = ({
 
       {/* Grouped Table View */}
       <div className="space-y-4">
-        {Object.keys(groupedSubmissions).length === 0 ? (
+        {isLoadingDocuments ? (
+          <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-2xs">
+            <Loader2 className="w-8 h-8 mx-auto text-emerald-600 animate-spin" />
+            <p className="mt-3 text-xs font-bold text-slate-600">Mengambil dokumen selesai dari server...</p>
+          </div>
+        ) : documentsError ? (
+          <div className="bg-white rounded-2xl p-8 text-center border border-rose-200 shadow-2xs">
+            <p className="text-sm font-bold text-rose-700">{documentsError}</p>
+            <button onClick={loadDocuments} className="mt-3 px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold disabled:opacity-50" disabled={isLoadingDocuments}>
+              Coba Lagi
+            </button>
+          </div>
+        ) : Object.keys(groupedSubmissions).length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-2xs space-y-3">
             <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
               <FolderArchive className="w-6 h-6" />

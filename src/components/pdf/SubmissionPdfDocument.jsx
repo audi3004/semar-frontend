@@ -19,6 +19,8 @@ import { AuthService } from "../../services/authService";
 import { PLN_LOGO_PNG_BASE64 } from "../../assets/plnLogoBase64";
 import semarLogo from "../../assets/logo_semar_trns.png";
 import { DOCUMENT_LETTERHEAD } from "./documentLetterhead";
+import { resolveSubmissionStatus } from "../../utils/submissionStatus";
+import { resolveSubmissionWorkUnits } from "../../utils/submissionWorkUnits";
 
 const plnLogo = PLN_LOGO_PNG_BASE64;
 
@@ -674,6 +676,8 @@ export const SubmissionPdfDocument = ({
    submission,
    qrCodeDataUrl: propQrCodeDataUrl,
 }) => {
+   const resolvedStatus = resolveSubmissionStatus(submission);
+   const workUnits = resolveSubmissionWorkUnits(submission);
    const finalDocNo = getFormattedDocNo(submission);
    const currentDateStr = new Date().toLocaleDateString("id-ID");
    const qrPayload = `TANGGAL CETAK: ${currentDateStr}\nNO: ${finalDocNo}`;
@@ -715,7 +719,7 @@ export const SubmissionPdfDocument = ({
          status: "pending",
       };
 
-   const statusLower = (submission.status || "").toLowerCase();
+   const statusLower = resolvedStatus.toLowerCase();
    const currentRoleLower = (
       submission.currentApproverRole || ""
    ).toLowerCase();
@@ -826,21 +830,11 @@ export const SubmissionPdfDocument = ({
            (roleSigKey ? submission[roleSigKey] : "") ||
            "";
 
-      const dateText = isMaker
+      const rawDate = isMaker
          ? submission.tanggalPengajuan
-            ? formatDateIndonesian(submission.tanggalPengajuan)
-            : "-"
          : step?.actionDate ||
-           (roleDateKey ? submission[roleDateKey] : null) ||
-           "-";
-      const notesText =
-         !isMaker &&
-         (step?.notes ||
-            step?.catatan ||
-            (role ? submission[`${role}Notes`] : null))
-            ? step?.notes || step?.catatan || submission[`${role}Notes`]
-            : null;
-
+           (roleDateKey ? submission[roleDateKey] : null);
+      const dateText = rawDate ? formatDateIndonesian(rawDate) : "-";
       return (
          <View style={styles.sigBox}>
             <View
@@ -891,8 +885,8 @@ export const SubmissionPdfDocument = ({
 
             <View style={styles.sigFooter}>
                <Text style={styles.sigDateText}>Tgl: {dateText}</Text>
-               {notesText && (
-                  <Text style={styles.sigNotesText}>"{notesText}"</Text>
+               {!isMaker && isApproved && (
+                  <Text style={styles.sigNotesText}>APPROVED</Text>
                )}
             </View>
          </View>
@@ -925,7 +919,7 @@ export const SubmissionPdfDocument = ({
                </View>
                <View style={styles.statusBadge}>
                   <Text style={styles.statusBadgeText}>
-                     STATUS: {getStatusLabel(submission.status).toUpperCase()}
+                     STATUS: {getStatusLabel(resolvedStatus).toUpperCase()}
                   </Text>
                </View>
             </View>
@@ -979,16 +973,16 @@ export const SubmissionPdfDocument = ({
                   <Text style={styles.boxTitle}>LOKASI UNIT KERJA</Text>
                   <View style={styles.kvRow}>
                      <Text style={styles.kvLabel}>Unit UPT</Text>
-                     <Text style={styles.kvValue}>: {submission.unitUpt}</Text>
+                     <Text style={styles.kvValue}>: {workUnits.unitUpt}</Text>
                   </View>
                   <View style={styles.kvRow}>
-                     <Text style={styles.kvLabel}>ULTG</Text>
-                     <Text style={styles.kvValue}>: {submission.unitUltg}</Text>
+                     <Text style={styles.kvLabel}>Unit ULTG</Text>
+                     <Text style={styles.kvValue}>: {workUnits.unitUltg}</Text>
                   </View>
                   <View style={styles.kvRow}>
-                     <Text style={styles.kvLabel}>Gardu Induk</Text>
+                     <Text style={styles.kvLabel}>Unit GI</Text>
                      <Text style={styles.kvValue}>
-                        : {submission.garduInduk}
+                        : {workUnits.unitGi}
                      </Text>
                   </View>
                </View>
@@ -1567,7 +1561,7 @@ export const SubmissionPdfDocument = ({
                   <View style={styles.statusBadge}>
                      <Text style={styles.statusBadgeText}>
                         STATUS:{" "}
-                        {getStatusLabel(submission.status).toUpperCase()}
+                        {getStatusLabel(resolvedStatus).toUpperCase()}
                      </Text>
                   </View>
                </View>

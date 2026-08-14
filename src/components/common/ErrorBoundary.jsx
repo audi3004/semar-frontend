@@ -17,7 +17,7 @@ export class ErrorBoundary extends React.Component {
 
   handleReset = () => {
     try {
-      localStorage.clear();
+      globalThis.appStorage.clear();
     } catch (e) {
       console.error(e);
     }

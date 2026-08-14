@@ -32,6 +32,10 @@ import { PLN_LOGO_PNG_BASE64 } from "../../assets/plnLogoBase64";
 import semarLogo from "../../assets/logo_semar_trns.png";
 import { motion } from "motion/react";
 import { DOCUMENT_LETTERHEAD } from "../pdf/documentLetterhead";
+import { getAccessToken } from "../../services/api";
+import { loadSubmissionDocumentData } from "../../services/submissionDocumentService";
+import { resolveSubmissionStatus, isSubmissionFinalApproved } from "../../utils/submissionStatus";
+import { resolveSubmissionWorkUnits } from "../../utils/submissionWorkUnits";
 
 const plnLogo = PLN_LOGO_PNG_BASE64;
 
@@ -56,14 +60,81 @@ const DocumentLetterhead = ({ label, numberLabel, dateLabel }) => (
       </div>
 
       <div className="w-full sm:w-auto text-left sm:text-right text-[10px] text-slate-700 sm:border-l sm:border-[#00A2B8] sm:pl-4">
-         <p className="font-extrabold text-[#075369] uppercase tracking-[0.06em]">{label}</p>
-         <p className="mt-1 font-mono text-slate-900 font-bold whitespace-nowrap">{numberLabel}</p>
+         <p className="font-extrabold text-[#075369] uppercase tracking-[0.06em]">
+            {label}
+         </p>
+         <p className="mt-1 font-mono text-slate-900 font-bold whitespace-nowrap">
+            {numberLabel}
+         </p>
          <p className="mt-0.5 text-[9px] text-slate-600">{dateLabel}</p>
       </div>
    </div>
 );
 
-export const DocumentViewerModal = ({
+const AttachmentPreview = ({ attachment, isPdf }) => {
+   const [blobUrl, setBlobUrl] = useState("");
+   const [loadError, setLoadError] = useState("");
+
+   useEffect(() => {
+      let active = true;
+      let objectUrl = "";
+      const token = getAccessToken();
+
+      fetch(attachment.url, {
+         credentials: "include",
+         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
+         .then((response) => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.blob();
+         })
+         .then((blob) => {
+            if (!active) return;
+            objectUrl = URL.createObjectURL(blob);
+            setBlobUrl(objectUrl);
+         })
+         .catch((error) => {
+            if (active) setLoadError(error?.message || "Lampiran gagal dimuat");
+         });
+
+      return () => {
+         active = false;
+         if (objectUrl) URL.revokeObjectURL(objectUrl);
+      };
+   }, [attachment.url]);
+
+   if (loadError) {
+      return (
+         <div className="flex flex-1 items-center justify-center text-center text-xs text-rose-700">
+            Lampiran tidak dapat ditampilkan ({loadError}).
+         </div>
+      );
+   }
+   if (!blobUrl) {
+      return (
+         <div className="flex flex-1 items-center justify-center text-xs font-semibold text-slate-500">
+            Memuat lampiran...
+         </div>
+      );
+   }
+   return isPdf ? (
+      <object
+         data={blobUrl}
+         type="application/pdf"
+         className="w-full flex-1 min-h-[215mm] border border-slate-300"
+      >
+         <iframe src={blobUrl} title={attachment.label} className="w-full min-h-[215mm]" />
+      </object>
+   ) : (
+      <img
+         src={blobUrl}
+         alt={attachment.label}
+         className="w-full flex-1 min-h-0 object-contain"
+      />
+   );
+};
+
+const DocumentViewerModalContent = ({
    submission,
    isReport = false,
    reportSubmissions = [],
@@ -144,10 +215,10 @@ export const DocumentViewerModal = ({
    const currentUser = AuthService.getCurrentUser();
    const userRole = (currentUser?.role || "").toLowerCase();
 
-   const handleDownloadPDF = () => {
+   const handleDownloadPDF = async () => {
       if (isReport) {
          if (!isPeriodCompleted) return;
-         PdfService.downloadReportPdf(
+         await PdfService.downloadReportPdf(
             reportSubmissions,
             reportFilterInfo,
             reportSignatories,
@@ -159,7 +230,11 @@ export const DocumentViewerModal = ({
             );
             return;
          }
-         PdfService.downloadPdf(submission);
+         try {
+            await PdfService.downloadPdf(submission);
+         } catch (error) {
+            alert(error?.message || "Gagal mengunduh PDF.");
+         }
       }
    };
 
@@ -168,9 +243,9 @@ export const DocumentViewerModal = ({
    };
 
    // Helper calculation for single submission
-   const statusLower = submission
-      ? (submission.status || "").toLowerCase()
-      : "";
+   const resolvedStatus = resolveSubmissionStatus(submission);
+   const workUnits = resolveSubmissionWorkUnits(submission);
+   const statusLower = resolvedStatus.toLowerCase();
    const currentRoleLower = submission
       ? (submission.currentApproverRole || "").toLowerCase()
       : "";
@@ -316,13 +391,11 @@ export const DocumentViewerModal = ({
            (roleSigKey ? submission[roleSigKey] : "") ||
            "";
 
-      const dateText = isMaker
+      const rawDate = isMaker
          ? submission.tanggalPengajuan
-            ? formatDateIndonesian(submission.tanggalPengajuan)
-            : "-"
          : step?.actionDate ||
-           (roleDateKey ? submission[roleDateKey] : null) ||
-           "-";
+           (roleDateKey ? submission[roleDateKey] : null);
+      const dateText = rawDate ? formatDateIndonesian(rawDate) : "-";
 
       return (
          <div className="border border-black p-2 flex flex-col justify-between h-36 bg-white rounded-none">
@@ -398,12 +471,9 @@ export const DocumentViewerModal = ({
 
             <div className="text-[8.5px] pt-1 border-t border-black/80 text-black">
                <p className="truncate font-mono">Tgl: {dateText}</p>
-               {!isMaker && (step?.notes || step?.catatan) && (
-                  <p
-                     className="text-[8px] italic text-black truncate mt-0.5"
-                     title={step.notes || step.catatan}
-                  >
-                     "{step.notes || step.catatan}"
+               {!isMaker && isApprovedStep && (
+                  <p className="text-[8px] font-bold text-black mt-0.5">
+                     APPROVED
                   </p>
                )}
             </div>
@@ -411,9 +481,7 @@ export const DocumentViewerModal = ({
       );
    };
 
-   const isFullyApproved =
-      submission &&
-      (submission.status === "APPROVED" || submission.status === "approved");
+   const isFullyApproved = isSubmissionFinalApproved(submission);
    const submissionAttachments = submission
       ? getSubmissionAttachments(submission)
       : [];
@@ -974,624 +1042,647 @@ export const DocumentViewerModal = ({
                ) : (
                   /* HTML FORMAL VIEW FOR SINGLE SUBMISSION DOCUMENT */
                   <>
-                  <div className="printable-a4-document max-w-[210mm] w-full mx-auto bg-white border border-black p-5 sm:p-6 space-y-4 rounded-none text-black">
-                     {/* Header Kop Surat PLN Formal */}
-                     <DocumentLetterhead
-                        label="FORMULIR PERSETUJUAN RESMI"
-                        numberLabel={`No: ${finalDocNo}`}
-                        dateLabel={`Tgl Pengajuan: ${formatDateIndonesian(submission.tanggalPengajuan)}`}
-                     />
+                     <div className="printable-a4-document max-w-[210mm] w-full mx-auto bg-white border border-black p-5 sm:p-6 space-y-4 rounded-none text-black">
+                        {/* Header Kop Surat PLN Formal */}
+                        <DocumentLetterhead
+                           label="FORMULIR PERSETUJUAN RESMI"
+                           numberLabel={`No: ${finalDocNo}`}
+                           dateLabel={`Tgl Pengajuan: ${formatDateIndonesian(submission.tanggalPengajuan)}`}
+                        />
 
-                     {/* Document Title & Status Banner Formal Clean */}
-                     <div className="flex items-center justify-between gap-4 bg-white p-2.5 border border-black page-break-inside-avoid">
-                        <div>
-                           <h2 className="text-sm sm:text-base font-extrabold text-black uppercase tracking-wide">
-                              PENGAJUAN {submission.type.toUpperCase()} DIGITAL
-                           </h2>
-                           <p className="text-[11px] text-black font-medium">
-                              Dokumentasi Berjenjang Transparan &amp; Akuntabel
-                           </p>
+                        {/* Document Title & Status Banner Formal Clean */}
+                        <div className="flex items-center justify-between gap-4 bg-white p-2.5 border border-black page-break-inside-avoid">
+                           <div>
+                              <h2 className="text-sm sm:text-base font-extrabold text-black uppercase tracking-wide">
+                                 PENGAJUAN {submission.type.toUpperCase()}{" "}
+                                 DIGITAL
+                              </h2>
+                              <p className="text-[11px] text-black font-medium">
+                                 Dokumentasi Berjenjang Transparan &amp;
+                                 Akuntabel
+                              </p>
+                           </div>
+                           <div className="px-3 py-1 border border-black text-xs font-extrabold uppercase text-black bg-white">
+                              STATUS:{" "}
+                              {getStatusLabel(resolvedStatus).toUpperCase()}
+                           </div>
                         </div>
-                        <div className="px-3 py-1 border border-black text-xs font-extrabold uppercase text-black bg-white">
-                           STATUS:{" "}
-                           {getStatusLabel(submission.status).toUpperCase()}
-                        </div>
-                     </div>
 
-                     {/* Rejection / Cancellation Note Banner */}
-                     {(submission.status?.toLowerCase() === "dibatalkan" ||
-                        submission.status?.toLowerCase() === "rejected" ||
-                        submission.rejectionReason) && (
-                        <div className="p-3 bg-white border border-black space-y-1 page-break-inside-avoid">
-                           <p className="font-extrabold text-black uppercase tracking-tight text-xs flex items-center gap-1.5">
-                              <XCircle className="w-4 h-4 text-black" />
-                              {submission.status?.toLowerCase() === "dibatalkan"
-                                 ? "KETERANGAN TRANSAKSI DIBATALKAN"
-                                 : "KETERANGAN CATATAN PENOLAKAN"}
-                           </p>
-                           <p className="text-xs text-black font-semibold">
-                              {submission.rejectionReason ||
-                                 (submission.status?.toLowerCase() ===
+                        {/* Rejection / Cancellation Note Banner */}
+                        {(submission.status?.toLowerCase() === "dibatalkan" ||
+                           submission.status?.toLowerCase() === "rejected" ||
+                           submission.rejectionReason) && (
+                           <div className="p-3 bg-white border border-black space-y-1 page-break-inside-avoid">
+                              <p className="font-extrabold text-black uppercase tracking-tight text-xs flex items-center gap-1.5">
+                                 <XCircle className="w-4 h-4 text-black" />
+                                 {submission.status?.toLowerCase() ===
                                  "dibatalkan"
-                                    ? "Transaksi Dibatalkan oleh Pemohon"
-                                    : "Pengajuan tidak disetujui.")}
-                           </p>
-                        </div>
-                     )}
-
-                     {/* Employee & Unit Info Grid */}
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs page-break-inside-avoid">
-                        <div className="bg-white p-3 border border-black space-y-1.5">
-                           <p className="font-extrabold text-black border-b border-black pb-1 uppercase tracking-tight flex items-center gap-1.5">
-                              <User className="w-3.5 h-3.5 text-black" />{" "}
-                              BIODATA TENAGA KERJA
-                           </p>
-                           <div className="grid grid-cols-3 gap-1 text-[11px]">
-                              <span className="text-black">Nama Lengkap</span>
-                              <span className="col-span-2 font-bold text-black">
-                                 : {submission.employeeName}
-                              </span>
-                              <span className="text-black">NIP</span>
-                              <span className="col-span-2 font-mono font-bold text-black">
-                                 : {submission.employeeNip}
-                              </span>
-                              <span className="text-black">Jabatan</span>
-                              <span className="col-span-2 text-black">
-                                 : {submission.employeeJabatan}
-                              </span>
+                                    ? "KETERANGAN TRANSAKSI DIBATALKAN"
+                                    : "KETERANGAN CATATAN PENOLAKAN"}
+                              </p>
+                              <p className="text-xs text-black font-semibold">
+                                 {submission.rejectionReason ||
+                                    (submission.status?.toLowerCase() ===
+                                    "dibatalkan"
+                                       ? "Transaksi Dibatalkan oleh Pemohon"
+                                       : "Pengajuan tidak disetujui.")}
+                              </p>
                            </div>
-                        </div>
+                        )}
 
-                        <div className="bg-white p-3 border border-black space-y-1.5">
-                           <p className="font-extrabold text-black border-b border-black pb-1 uppercase tracking-tight flex items-center gap-1.5">
-                              <Building2 className="w-3.5 h-3.5 text-black" />{" "}
-                              LOKASI UNIT KERJA
-                           </p>
-                           <div className="grid grid-cols-3 gap-1 text-[11px]">
-                              <span className="text-black">Unit UPT</span>
-                              <span className="col-span-2 font-semibold text-black">
-                                 : {submission.unitUpt}
-                              </span>
-                              <span className="text-black">ULTG</span>
-                              <span className="col-span-2 text-black">
-                                 : {submission.unitUltg}
-                              </span>
-                              <span className="text-black">Gardu Induk</span>
-                              <span className="col-span-2 font-bold text-black">
-                                 : {submission.garduInduk}
-                              </span>
-                           </div>
-                        </div>
-                     </div>
-
-                     {/* Dynamic Content Details by Submission Type */}
-                     <div className="bg-white p-3 border border-black text-xs space-y-3 page-break-inside-avoid">
-                        <p className="font-extrabold text-black border-b border-black pb-1 uppercase tracking-tight flex items-center gap-1.5">
-                           <Briefcase className="w-3.5 h-3.5 text-black" />{" "}
-                           DETAIL DOKUMEN PENGAJUAN
-                        </p>
-
-                        {/* LEMBUR */}
-                        {submission.type === "lembur" && (
-                           <div className="space-y-3 text-black">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                                 <p>
-                                    <span className="text-black">
-                                       Tanggal Lembur:
-                                    </span>{" "}
-                                    <strong className="ml-1">
-                                       {formatDateIndonesian(
-                                          submission.tanggalLembur,
-                                       )}
-                                    </strong>
-                                 </p>
-                                 <p>
-                                    <span className="text-black">
-                                       Jam Operasional:
-                                    </span>{" "}
-                                    <strong className="ml-1">
-                                       {submission.jamMulai} -{" "}
-                                       {submission.jamSelesai} (
-                                       {submission.durasiJam} Jam)
-                                    </strong>
-                                 </p>
-                                 <p>
-                                    <span className="text-black">
-                                       Kategori Lembur:
-                                    </span>{" "}
-                                    <strong className="ml-1">
-                                       {submission.kategoriLembur}
-                                    </strong>
-                                 </p>
-                                 {submission.jenisPekerjaan &&
-                                    submission.jenisPekerjaan !== "-" && (
-                                       <p>
-                                          <span className="text-black">
-                                             Jenis Pekerjaan:
-                                          </span>{" "}
-                                          <strong className="ml-1">
-                                             {submission.jenisPekerjaan}
-                                          </strong>
-                                       </p>
-                                    )}
-                                 <p>
-                                    <span className="text-black font-semibold">
-                                       Area Group:
-                                    </span>{" "}
-                                    <strong className="ml-1">
-                                       {submission.areaGroup}
-                                    </strong>
-                                 </p>
-                                 {submission.petugasPendampingNama && (
-                                    <p>
-                                       <span className="text-black">
-                                          Ganti Piket An. :
-                                       </span>{" "}
-                                       <strong className="ml-1">
-                                          {submission.petugasPendampingNip} -{" "}
-                                          {submission.petugasPendampingNama}
-                                       </strong>
-                                    </p>
-                                 )}
-                                 {submission.jumlahJamKoreksi !== undefined &&
-                                    submission.jumlahJamKoreksi !== null &&
-                                    submission.jumlahJamKoreksi !== "" && (
-                                       <p>
-                                          <span className="text-black">
-                                             Jumlah Lembur Koreksi:
-                                          </span>{" "}
-                                          <strong className="ml-1 font-bold text-black">
-                                             {submission.jumlahJamKoreksi} Jam
-                                          </strong>
-                                       </p>
-                                    )}
-                                 {submission.catatanKoreksi && (
-                                    <p className="col-span-full">
-                                       <span className="text-black font-semibold">
-                                          Catatan Koreksi Checker:
-                                       </span>{" "}
-                                       {submission.catatanKoreksi}
-                                    </p>
-                                 )}
-                                 <p className="col-span-full">
-                                    <span className="text-black font-semibold">
-                                       Uraian Pekerjaan:
-                                    </span>{" "}
-                                    {submission.kegiatanDetail}
-                                 </p>
+                        {/* Employee & Unit Info Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs page-break-inside-avoid">
+                           <div className="bg-white p-3 border border-black space-y-1.5">
+                              <p className="font-extrabold text-black border-b border-black pb-1 uppercase tracking-tight flex items-center gap-1.5">
+                                 <User className="w-3.5 h-3.5 text-black" />{" "}
+                                 BIODATA TENAGA KERJA
+                              </p>
+                              <div className="grid grid-cols-3 gap-1 text-[11px]">
+                                 <span className="text-black">
+                                    Nama Lengkap
+                                 </span>
+                                 <span className="col-span-2 font-bold text-black">
+                                    : {submission.employeeName}
+                                 </span>
+                                 <span className="text-black">NIP</span>
+                                 <span className="col-span-2 font-mono font-bold text-black">
+                                    : {submission.employeeNip}
+                                 </span>
+                                 <span className="text-black">Jabatan</span>
+                                 <span className="col-span-2 text-black">
+                                    : {submission.employeeJabatan}
+                                 </span>
                               </div>
                            </div>
-                        )}
 
-                        {/* CUTI */}
-                        {submission.type === "cuti" && (
-                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-black">
-                              <p>
-                                 <span className="text-black">Jenis Cuti:</span>{" "}
-                                 <strong className="ml-1 text-black">
-                                    {submission.cutiType}
-                                 </strong>
+                           <div className="bg-white p-3 border border-black space-y-1.5">
+                              <p className="font-extrabold text-black border-b border-black pb-1 uppercase tracking-tight flex items-center gap-1.5">
+                                 <Building2 className="w-3.5 h-3.5 text-black" />{" "}
+                                 LOKASI UNIT KERJA
                               </p>
-                              <p>
-                                 <span className="text-black">
-                                    Periode Cuti:
-                                 </span>{" "}
-                                 <strong className="ml-1">
-                                    {formatDateIndonesian(
-                                       submission.tanggalMulai,
-                                    )}{" "}
-                                    s/d{" "}
-                                    {formatDateIndonesian(
-                                       submission.tanggalSelesai,
+                              <div className="grid grid-cols-3 gap-1 text-[11px]">
+                                 <span className="text-black">Unit UPT</span>
+                                 <span className="col-span-2 font-semibold text-black">
+                                    : {workUnits.unitUpt}
+                                 </span>
+                                 <span className="text-black">Unit ULTG</span>
+                                 <span className="col-span-2 text-black">
+                                    : {workUnits.unitUltg}
+                                 </span>
+                                 <span className="text-black">Unit GI</span>
+                                 <span className="col-span-2 font-bold text-black">
+                                    : {workUnits.unitGi}
+                                 </span>
+                              </div>
+                           </div>
+                        </div>
+
+                        {/* Dynamic Content Details by Submission Type */}
+                        <div className="bg-white p-3 border border-black text-xs space-y-3 page-break-inside-avoid">
+                           <p className="font-extrabold text-black border-b border-black pb-1 uppercase tracking-tight flex items-center gap-1.5">
+                              <Briefcase className="w-3.5 h-3.5 text-black" />{" "}
+                              DETAIL DOKUMEN PENGAJUAN
+                           </p>
+
+                           {/* LEMBUR */}
+                           {submission.type === "lembur" && (
+                              <div className="space-y-3 text-black">
+                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                    <p>
+                                       <span className="text-black">
+                                          Tanggal Lembur:
+                                       </span>{" "}
+                                       <strong className="ml-1">
+                                          {formatDateIndonesian(
+                                             submission.tanggalLembur,
+                                          )}
+                                       </strong>
+                                    </p>
+                                    <p>
+                                       <span className="text-black">
+                                          Jam Operasional:
+                                       </span>{" "}
+                                       <strong className="ml-1">
+                                          {submission.jamMulai} -{" "}
+                                          {submission.jamSelesai} (
+                                          {submission.durasiJam} Jam)
+                                       </strong>
+                                    </p>
+                                    <p>
+                                       <span className="text-black">
+                                          Kategori Lembur:
+                                       </span>{" "}
+                                       <strong className="ml-1">
+                                          {submission.kategoriLembur}
+                                       </strong>
+                                    </p>
+                                    {submission.jenisPekerjaan &&
+                                       submission.jenisPekerjaan !== "-" && (
+                                          <p>
+                                             <span className="text-black">
+                                                Jenis Pekerjaan:
+                                             </span>{" "}
+                                             <strong className="ml-1">
+                                                {submission.jenisPekerjaan}
+                                             </strong>
+                                          </p>
+                                       )}
+                                    <p>
+                                       <span className="text-black font-semibold">
+                                          Area Group:
+                                       </span>{" "}
+                                       <strong className="ml-1">
+                                          {submission.areaGroup}
+                                       </strong>
+                                    </p>
+                                    {submission.petugasPendampingNama && (
+                                       <p>
+                                          <span className="text-black">
+                                             Ganti Piket An. :
+                                          </span>{" "}
+                                          <strong className="ml-1">
+                                             {submission.petugasPendampingNip} -{" "}
+                                             {submission.petugasPendampingNama}
+                                          </strong>
+                                       </p>
                                     )}
-                                 </strong>
-                              </p>
-                              <p>
-                                 <span className="text-black">
-                                    Jumlah Durasi:
-                                 </span>{" "}
-                                 <strong className="ml-1">
-                                    {submission.jumlahHari} Hari Kerja
-                                 </strong>
-                              </p>
-                              <p>
-                                 <span className="text-black">
-                                    Sisa Cuti Pasca Pengajuan:
-                                 </span>{" "}
-                                 <strong className="ml-1 text-black">
-                                    {submission.sisaCutiSesudahnya} Hari
-                                 </strong>{" "}
-                                 (Sebelumnya:{" "}
-                                 {submission.sisaCutiSebelumnya || "-"} Hari)
-                              </p>
-                              <p className="col-span-full">
-                                 <span className="text-black">
-                                    Alamat Selama Cuti &amp; Kontak Darurat:
-                                 </span>{" "}
-                                 {submission.alamatSelamaCuti} (Telp:{" "}
-                                 {submission.nomorTeleponDarurat})
-                              </p>
-                           </div>
-                        )}
-
-                        {/* IJIN */}
-                        {submission.type === "ijin" && (
-                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-black">
-                              <p>
-                                 <span className="text-black">
-                                    Alasan / Jenis Ijin:
-                                 </span>{" "}
-                                 <strong className="ml-1 text-black">
-                                    {submission.ijinReasonType ||
-                                       submission.alasanIjin ||
-                                       "Ijin Resmi"}
-                                 </strong>
-                              </p>
-                              <p>
-                                 <span className="text-black">
-                                    Jumlah Hari (Ijin):
-                                 </span>{" "}
-                                 <strong className="ml-1 text-sky-900 font-bold">
-                                    {submission.jumlahHari} Hari
-                                 </strong>
-                              </p>
-                              <p>
-                                 <span className="text-black">
-                                    Jumlah Hari (di Setujui):
-                                 </span>{" "}
-                                 <strong className="ml-1 text-emerald-800 font-bold">
-                                    {submission.jumlahHariDisetujui
-                                       ? `${submission.jumlahHariDisetujui} Hari`
-                                       : `${submission.jumlahHari} Hari (Proses)`}
-                                 </strong>
-                              </p>
-                              <p className="col-span-full">
-                                 <span className="text-black">
-                                    Periode Ijin:
-                                 </span>{" "}
-                                 <strong className="ml-1">
-                                    {formatDateIndonesian(
-                                       submission.tanggalMulai,
-                                    )}{" "}
-                                    s/d{" "}
-                                    {formatDateIndonesian(
-                                       submission.tanggalSelesai,
+                                    {submission.jumlahJamKoreksi !==
+                                       undefined &&
+                                       submission.jumlahJamKoreksi !== null &&
+                                       submission.jumlahJamKoreksi !== "" && (
+                                          <p>
+                                             <span className="text-black">
+                                                Jumlah Lembur Koreksi:
+                                             </span>{" "}
+                                             <strong className="ml-1 font-bold text-black">
+                                                {submission.jumlahJamKoreksi}{" "}
+                                                Jam
+                                             </strong>
+                                          </p>
+                                       )}
+                                    {submission.catatanKoreksi && (
+                                       <p className="col-span-full">
+                                          <span className="text-black font-semibold">
+                                             Catatan Koreksi Checker:
+                                          </span>{" "}
+                                          {submission.catatanKoreksi}
+                                       </p>
                                     )}
-                                 </strong>
-                              </p>
-                              <p className="col-span-full">
-                                 <span className="text-black">
-                                    Keterangan / Keperluan:
-                                 </span>{" "}
-                                 {submission.keterangan || "-"}
-                              </p>
-                           </div>
-                        )}
+                                    <p className="col-span-full">
+                                       <span className="text-black font-semibold">
+                                          Uraian Pekerjaan:
+                                       </span>{" "}
+                                       {submission.kegiatanDetail}
+                                    </p>
+                                 </div>
+                              </div>
+                           )}
 
-                        {/* SAKIT */}
-                        {submission.type === "sakit" && (
-                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-black">
-                              <p>
-                                 <span className="text-black">
-                                    Instansi / Klinik / RS:
-                                 </span>{" "}
-                                 <strong className="ml-1 text-black">
-                                    {submission.instansiKlinik ||
-                                       submission.namaDokterFaskes ||
-                                       "-"}
-                                 </strong>
-                              </p>
-                              <p>
-                                 <span className="text-black">
-                                    Dokter Penanggung Jawab:
-                                 </span>{" "}
-                                 <strong className="ml-1 text-black">
-                                    {submission.namaDokter || "-"}
-                                 </strong>
-                              </p>
-                              <p>
-                                 <span className="text-black">
-                                    Periode Istirahat Sakit:
-                                 </span>{" "}
-                                 <strong className="ml-1">
-                                    {formatDateIndonesian(
-                                       submission.tanggalMulai,
-                                    )}{" "}
-                                    s/d{" "}
-                                    {formatDateIndonesian(
-                                       submission.tanggalSelesai,
-                                    )}{" "}
-                                    ({submission.jumlahHari} Hari)
-                                 </strong>
-                              </p>
-                              <p>
-                                 <span className="text-black">
-                                    Diagnosa Singkat:
-                                 </span>{" "}
-                                 <strong className="ml-1 text-black">
-                                    {submission.diagnosaSingkat || "-"}
-                                 </strong>
-                              </p>
-                           </div>
-                        )}
-
-                        {/* SPPD */}
-                        {submission.type === "sppd" && (
-                           <div className="space-y-3 text-black">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                           {/* CUTI */}
+                           {submission.type === "cuti" && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-black">
                                  <p>
                                     <span className="text-black">
-                                       No. Surat Tugas PLN:
+                                       Jenis Cuti:
                                     </span>{" "}
-                                    <strong className="ml-1 font-mono text-black">
-                                       {submission.nomorSuratTugas}
+                                    <strong className="ml-1 text-black">
+                                       {submission.cutiType}
                                     </strong>
                                  </p>
                                  <p>
                                     <span className="text-black">
-                                       Rute Perjalanan Dinas:
-                                    </span>{" "}
-                                    <strong className="ml-1">
-                                       {submission.kotaAsal} &rarr;{" "}
-                                       {submission.kotaTujuan} (
-                                       {submission.durasiHari} Hari)
-                                    </strong>
-                                 </p>
-                                 <p>
-                                    <span className="text-black">
-                                       Tanggal Berangkat &amp; Kembali:
+                                       Periode Cuti:
                                     </span>{" "}
                                     <strong className="ml-1">
                                        {formatDateIndonesian(
-                                          submission.tanggalBerangkat,
+                                          submission.tanggalMulai,
                                        )}{" "}
                                        s/d{" "}
                                        {formatDateIndonesian(
-                                          submission.tanggalKembali,
+                                          submission.tanggalSelesai,
                                        )}
                                     </strong>
                                  </p>
                                  <p>
                                     <span className="text-black">
-                                       Beban Anggaran Unit:
+                                       Jumlah Durasi:
                                     </span>{" "}
                                     <strong className="ml-1">
-                                       {submission.bebanAnggaranUnit || "-"}
+                                       {submission.jumlahHari} Hari Kerja
+                                    </strong>
+                                 </p>
+                                 <p>
+                                    <span className="text-black">
+                                       Sisa Cuti Pasca Pengajuan:
+                                    </span>{" "}
+                                    <strong className="ml-1 text-black">
+                                       {submission.sisaCutiSesudahnya} Hari
+                                    </strong>{" "}
+                                    (Sebelumnya:{" "}
+                                    {submission.sisaCutiSebelumnya || "-"} Hari)
+                                 </p>
+                                 <p className="col-span-full">
+                                    <span className="text-black">
+                                       Alamat Selama Cuti &amp; Kontak Darurat:
+                                    </span>{" "}
+                                    {submission.alamatSelamaCuti} (Telp:{" "}
+                                    {submission.nomorTeleponDarurat})
+                                 </p>
+                              </div>
+                           )}
+
+                           {/* IJIN */}
+                           {submission.type === "ijin" && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-black">
+                                 <p>
+                                    <span className="text-black">
+                                       Alasan / Jenis Ijin:
+                                    </span>{" "}
+                                    <strong className="ml-1 text-black">
+                                       {submission.ijinReasonType ||
+                                          submission.alasanIjin ||
+                                          "Ijin Resmi"}
+                                    </strong>
+                                 </p>
+                                 <p>
+                                    <span className="text-black">
+                                       Jumlah Hari (Ijin):
+                                    </span>{" "}
+                                    <strong className="ml-1 text-sky-900 font-bold">
+                                       {submission.jumlahHari} Hari
+                                    </strong>
+                                 </p>
+                                 <p>
+                                    <span className="text-black">
+                                       Jumlah Hari (di Setujui):
+                                    </span>{" "}
+                                    <strong className="ml-1 text-emerald-800 font-bold">
+                                       {submission.jumlahHariDisetujui
+                                          ? `${submission.jumlahHariDisetujui} Hari`
+                                          : `${submission.jumlahHari} Hari (Proses)`}
                                     </strong>
                                  </p>
                                  <p className="col-span-full">
                                     <span className="text-black">
-                                       Maksud Perjalanan:
+                                       Periode Ijin:
                                     </span>{" "}
-                                    {submission.maksudPerjalanan}
+                                    <strong className="ml-1">
+                                       {formatDateIndonesian(
+                                          submission.tanggalMulai,
+                                       )}{" "}
+                                       s/d{" "}
+                                       {formatDateIndonesian(
+                                          submission.tanggalSelesai,
+                                       )}
+                                    </strong>
+                                 </p>
+                                 <p className="col-span-full">
+                                    <span className="text-black">
+                                       Keterangan / Keperluan:
+                                    </span>{" "}
+                                    {submission.keterangan || "-"}
                                  </p>
                               </div>
+                           )}
 
-                              {/* Expenses Table */}
-                              <div className="overflow-x-auto mt-1">
-                                 <table className="w-full text-left text-[11px] border-collapse border border-black">
-                                    <thead>
-                                       <tr className="bg-white text-black font-extrabold border-b border-black">
-                                          <th className="p-1.5 border-r border-black">
-                                             Rincian Komponen Biaya
-                                          </th>
-                                          <th className="p-1.5 border-r border-black">
-                                             Kategori
-                                          </th>
-                                          <th className="p-1.5 text-right">
-                                             Nominal (Rp)
-                                          </th>
-                                       </tr>
-                                    </thead>
-                                    <tbody>
-                                       {submission.expenses?.map((exp) => (
-                                          <tr
-                                             key={exp.id}
-                                             className="border-b border-black/40"
-                                          >
-                                             <td className="p-1.5 border-r border-black/40">
-                                                {exp.deskripsi}
+                           {/* SAKIT */}
+                           {submission.type === "sakit" && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-black">
+                                 <p>
+                                    <span className="text-black">
+                                       Instansi / Klinik / RS:
+                                    </span>{" "}
+                                    <strong className="ml-1 text-black">
+                                       {submission.instansiKlinik ||
+                                          submission.namaDokterFaskes ||
+                                          "-"}
+                                    </strong>
+                                 </p>
+                                 <p>
+                                    <span className="text-black">
+                                       Dokter Penanggung Jawab:
+                                    </span>{" "}
+                                    <strong className="ml-1 text-black">
+                                       {submission.namaDokter || "-"}
+                                    </strong>
+                                 </p>
+                                 <p>
+                                    <span className="text-black">
+                                       Periode Istirahat Sakit:
+                                    </span>{" "}
+                                    <strong className="ml-1">
+                                       {formatDateIndonesian(
+                                          submission.tanggalMulai,
+                                       )}{" "}
+                                       s/d{" "}
+                                       {formatDateIndonesian(
+                                          submission.tanggalSelesai,
+                                       )}{" "}
+                                       ({submission.jumlahHari} Hari)
+                                    </strong>
+                                 </p>
+                                 <p>
+                                    <span className="text-black">
+                                       Diagnosa Singkat:
+                                    </span>{" "}
+                                    <strong className="ml-1 text-black">
+                                       {submission.diagnosaSingkat || "-"}
+                                    </strong>
+                                 </p>
+                              </div>
+                           )}
+
+                           {/* SPPD */}
+                           {submission.type === "sppd" && (
+                              <div className="space-y-3 text-black">
+                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                    <p>
+                                       <span className="text-black">
+                                          No. Surat Tugas PLN:
+                                       </span>{" "}
+                                       <strong className="ml-1 font-mono text-black">
+                                          {submission.nomorSuratTugas}
+                                       </strong>
+                                    </p>
+                                    <p>
+                                       <span className="text-black">
+                                          Rute Perjalanan Dinas:
+                                       </span>{" "}
+                                       <strong className="ml-1">
+                                          {submission.kotaAsal} &rarr;{" "}
+                                          {submission.kotaTujuan} (
+                                          {submission.durasiHari} Hari)
+                                       </strong>
+                                    </p>
+                                    <p>
+                                       <span className="text-black">
+                                          Tanggal Berangkat &amp; Kembali:
+                                       </span>{" "}
+                                       <strong className="ml-1">
+                                          {formatDateIndonesian(
+                                             submission.tanggalBerangkat,
+                                          )}{" "}
+                                          s/d{" "}
+                                          {formatDateIndonesian(
+                                             submission.tanggalKembali,
+                                          )}
+                                       </strong>
+                                    </p>
+                                    <p>
+                                       <span className="text-black">
+                                          Beban Anggaran Unit:
+                                       </span>{" "}
+                                       <strong className="ml-1">
+                                          {submission.bebanAnggaranUnit || "-"}
+                                       </strong>
+                                    </p>
+                                    <p className="col-span-full">
+                                       <span className="text-black">
+                                          Maksud Perjalanan:
+                                       </span>{" "}
+                                       {submission.maksudPerjalanan}
+                                    </p>
+                                 </div>
+
+                                 {/* Expenses Table */}
+                                 <div className="overflow-x-auto mt-1">
+                                    <table className="w-full text-left text-[11px] border-collapse border border-black">
+                                       <thead>
+                                          <tr className="bg-white text-black font-extrabold border-b border-black">
+                                             <th className="p-1.5 border-r border-black">
+                                                Rincian Komponen Biaya
+                                             </th>
+                                             <th className="p-1.5 border-r border-black">
+                                                Kategori
+                                             </th>
+                                             <th className="p-1.5 text-right">
+                                                Nominal (Rp)
+                                             </th>
+                                          </tr>
+                                       </thead>
+                                       <tbody>
+                                          {submission.expenses?.map((exp) => (
+                                             <tr
+                                                key={exp.id}
+                                                className="border-b border-black/40"
+                                             >
+                                                <td className="p-1.5 border-r border-black/40">
+                                                   {exp.deskripsi}
+                                                </td>
+                                                <td className="p-1.5 border-r border-black/40">
+                                                   {exp.kategori}
+                                                </td>
+                                                <td className="p-1.5 text-right font-mono font-bold">
+                                                   {showSppdNominal
+                                                      ? formatRupiah(
+                                                           exp.nominal || 0,
+                                                        )
+                                                      : "-"}
+                                                </td>
+                                             </tr>
+                                          ))}
+                                          <tr className="font-extrabold bg-white border-t border-black">
+                                             <td
+                                                colSpan={2}
+                                                className="p-1.5 text-right border-r border-black"
+                                             >
+                                                TOTAL SPPD:
                                              </td>
-                                             <td className="p-1.5 border-r border-black/40">
-                                                {exp.kategori}
-                                             </td>
-                                             <td className="p-1.5 text-right font-mono font-bold">
+                                             <td className="p-1.5 text-right font-mono text-xs text-black">
                                                 {showSppdNominal
                                                    ? formatRupiah(
-                                                        exp.nominal || 0,
+                                                        calculatedTotalSppd,
                                                      )
                                                    : "-"}
                                              </td>
                                           </tr>
-                                       ))}
-                                       <tr className="font-extrabold bg-white border-t border-black">
-                                          <td
-                                             colSpan={2}
-                                             className="p-1.5 text-right border-r border-black"
-                                          >
-                                             TOTAL SPPD:
-                                          </td>
-                                          <td className="p-1.5 text-right font-mono text-xs text-black">
-                                             {showSppdNominal
-                                                ? formatRupiah(
-                                                     calculatedTotalSppd,
-                                                  )
-                                                : "-"}
-                                          </td>
-                                       </tr>
-                                    </tbody>
-                                 </table>
-                              </div>
-                           </div>
-                        )}
-                     </div>
-
-                     {/* Signature Matrix Section */}
-                     <div className="space-y-3 pt-1 page-break-inside-avoid">
-                        <div className="flex items-center justify-between border-b-2 border-black pb-1">
-                           <h3 className="text-xs font-black text-black flex items-center gap-1.5 uppercase tracking-wide">
-                              <ShieldCheck className="w-4 h-4 text-black" />
-                              DOKUMENTASI TANDA TANGAN DIGITAL
-                           </h3>
-                           <span className="text-[8px] text-black font-semibold">
-                              Verifikasi Enkripsi Hash Digital #PLNES-UP2
-                           </span>
-                        </div>
-
-                        {/* Pemohon Group */}
-                        <div className="flex justify-center">
-                           <div className="w-full sm:w-1/3 max-w-xs">
-                              <p className="text-[10px] font-extrabold text-black mb-1 text-center uppercase tracking-wider border border-black py-0.5 bg-white">
-                                 1. PEMOHON
-                              </p>
-                              {renderSignatureBox(
-                                 "Maker / Pemohon",
-                                 null,
-                                 true,
-                              )}
-                           </div>
-                        </div>
-
-                        {/* Middle Left & Middle Right Approvers */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-1">
-                           <div className="bg-white p-2 border border-black space-y-1.5">
-                              <p className="text-[10px] font-extrabold text-black uppercase tracking-wider border-b border-black pb-1 flex items-center justify-between">
-                                 <span>2. PENGGUNA / UNIT PLN</span>
-                              </p>
-                              <div
-                                 className={`grid grid-cols-1 ${hasVerificationAssigned ? "sm:grid-cols-3" : "sm:grid-cols-2"} gap-2`}
-                              >
-                                 {renderSignatureBox(checkerStep)}
-                                 {hasVerificationAssigned &&
-                                    renderSignatureBox(verificationStep)}
-                                 {renderSignatureBox(approved1Step)}
-                              </div>
-                           </div>
-
-                           <div className="bg-white p-2 border border-black space-y-1.5">
-                              <p className="text-[10px] font-extrabold text-black uppercase tracking-wider border-b border-black pb-1 flex items-center justify-between">
-                                 <span>3. PLN ES UP 2</span>
-                              </p>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                 {renderSignatureBox(approved2Step)}
-                                 {renderSignatureBox(approved3Step)}
-                              </div>
-                           </div>
-                        </div>
-                     </div>
-
-                     {/* Authenticity Verification Footer */}
-                     <div className="pt-3 border-t border-black flex flex-col sm:flex-row items-center justify-between text-[10px] text-black gap-2 page-break-inside-avoid">
-                        <div className="flex items-center gap-2.5">
-                           {qrCodeDataUrl ? (
-                              <img
-                                 src={qrCodeDataUrl}
-                                 alt="QR Code Pengesahan"
-                                 className="w-10 h-10 object-contain"
-                              />
-                           ) : (
-                              <div className="p-1.5 bg-white border border-black">
-                                 <QrCode className="w-7 h-7 text-black" />
-                              </div>
-                           )}
-                           <div>
-                              <p className="font-bold text-black">
-                                 DOKUMEN ELEKTRONIK
-                              </p>
-                              <p className="text-[9.5px] text-black">
-                                 Otorisasi SEMAR PLN Electricity Services
-                              </p>
-                              <p className="text-[9.5px] text-black">
-                                 Unit Pelaksana 2 Jawa Tengah &amp; DI
-                                 Yogyakarta
-                              </p>
-                           </div>
-                        </div>
-                        <div className="text-right font-mono text-[9.5px] flex flex-col items-end">
-                           <img
-                              src={semarLogo}
-                              alt="SEMAR Logo"
-                              className="h-6 sm:h-7 w-auto object-contain flex-shrink-0 mb-0.5"
-                              referrerPolicy="no-referrer"
-                           />
-                           <p className="text-black">
-                              Waktu Cetak: {new Date().toLocaleString("id-ID")}
-                           </p>
-                           <p className="text-black font-bold">
-                              <span className="print:hidden">
-                                 Halaman 1 dari {1 + submissionAttachments.length}
-                              </span>
-                              <span className="hidden print:inline-block page-counter"></span>
-                           </p>
-                        </div>
-                     </div>
-                  </div>
-
-                  {submissionAttachments.map((attachment, index) => {
-                     const isPdfAttachment = /\.pdf(?:$|\?)/i.test(attachment.url) ||
-                        /\.pdf$/i.test(attachment.fileName || "");
-                     return (
-                        <div
-                           key={`${attachment.url}-${index}`}
-                           className="printable-a4-document max-w-[210mm] min-h-[297mm] w-full mx-auto mt-4 bg-white border border-black p-5 sm:p-6 rounded-none text-black flex flex-col print:break-before-page"
-                        >
-                           <DocumentLetterhead
-                              label="LAMPIRAN DOKUMEN PENGAJUAN"
-                              numberLabel={`No: ${finalDocNo}`}
-                              dateLabel={`Tgl Pengajuan: ${formatDateIndonesian(submission.tanggalPengajuan)}`}
-                           />
-
-                           <div className="my-4 border border-black p-3 flex-1 flex flex-col min-h-0">
-                              <div className="mb-3 pb-2 border-b border-black">
-                                 <h3 className="text-sm font-extrabold uppercase tracking-wide">
-                                    {attachment.label}
-                                 </h3>
-                                 <p className="text-[10px] text-slate-700 mt-1 font-mono break-all">
-                                    Berkas: {attachment.fileName}
-                                 </p>
-                              </div>
-                              {isPdfAttachment ? (
-                                 <object
-                                    data={attachment.url}
-                                    type="application/pdf"
-                                    className="w-full flex-1 min-h-[215mm] border border-slate-300"
-                                 >
-                                    <a href={attachment.url} target="_blank" rel="noreferrer" className="text-sky-700 underline">
-                                       Buka lampiran PDF {attachment.label}
-                                    </a>
-                                 </object>
-                              ) : (
-                                 <img
-                                    src={attachment.url}
-                                    alt={attachment.label}
-                                    className="w-full flex-1 min-h-0 object-contain"
-                                    referrerPolicy="no-referrer"
-                                 />
-                              )}
-                           </div>
-
-                           <div className="pt-3 border-t border-black flex flex-col sm:flex-row items-center justify-between text-[10px] text-black gap-2 page-break-inside-avoid">
-                              <div className="flex items-center gap-2.5">
-                                 {qrCodeDataUrl ? (
-                                    <img src={qrCodeDataUrl} alt="QR Code Pengesahan" className="w-10 h-10 object-contain" />
-                                 ) : (
-                                    <div className="p-1.5 bg-white border border-black"><QrCode className="w-7 h-7 text-black" /></div>
-                                 )}
-                                 <div>
-                                    <p className="font-bold text-black">DOKUMEN ELEKTRONIK</p>
-                                    <p className="text-[9.5px] text-black">Otorisasi SEMAR PLN Electricity Services</p>
-                                    <p className="text-[9.5px] text-black">Unit Pelaksana 2 Jawa Tengah &amp; DI Yogyakarta</p>
+                                       </tbody>
+                                    </table>
                                  </div>
                               </div>
-                              <div className="text-right font-mono text-[9.5px] flex flex-col items-end">
-                                 <img src={semarLogo} alt="SEMAR Logo" className="h-6 sm:h-7 w-auto object-contain mb-0.5" referrerPolicy="no-referrer" />
-                                 <p>Waktu Cetak: {new Date().toLocaleString("id-ID")}</p>
-                                 <p className="font-bold">Halaman {index + 2} dari {submissionAttachments.length + 1}</p>
+                           )}
+                        </div>
+
+                        {/* Signature Matrix Section */}
+                        <div className="space-y-3 pt-1 page-break-inside-avoid">
+                           <div className="flex items-center justify-between border-b-2 border-black pb-1">
+                              <h3 className="text-xs font-black text-black flex items-center gap-1.5 uppercase tracking-wide">
+                                 <ShieldCheck className="w-4 h-4 text-black" />
+                                 DOKUMENTASI TANDA TANGAN DIGITAL
+                              </h3>
+                              <span className="text-[8px] text-black font-semibold">
+                                 Verifikasi Enkripsi Hash Digital #PLNES-UP2
+                              </span>
+                           </div>
+
+                           {/* Pemohon Group */}
+                           <div className="flex justify-center">
+                              <div className="w-full sm:w-1/3 max-w-xs">
+                                 <p className="text-[10px] font-extrabold text-black mb-1 text-center uppercase tracking-wider border border-black py-0.5 bg-white">
+                                    1. PEMOHON
+                                 </p>
+                                 {renderSignatureBox(
+                                    "Maker / Pemohon",
+                                    null,
+                                    true,
+                                 )}
+                              </div>
+                           </div>
+
+                           {/* Middle Left & Middle Right Approvers */}
+                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-1">
+                              <div className="bg-white p-2 border border-black space-y-1.5">
+                                 <p className="text-[10px] font-extrabold text-black uppercase tracking-wider border-b border-black pb-1 flex items-center justify-between">
+                                    <span>2. PENGGUNA / UNIT PLN</span>
+                                 </p>
+                                 <div
+                                    className={`grid grid-cols-1 ${hasVerificationAssigned ? "sm:grid-cols-3" : "sm:grid-cols-2"} gap-2`}
+                                 >
+                                    {renderSignatureBox(checkerStep)}
+                                    {hasVerificationAssigned &&
+                                       renderSignatureBox(verificationStep)}
+                                    {renderSignatureBox(approved1Step)}
+                                 </div>
+                              </div>
+
+                              <div className="bg-white p-2 border border-black space-y-1.5">
+                                 <p className="text-[10px] font-extrabold text-black uppercase tracking-wider border-b border-black pb-1 flex items-center justify-between">
+                                    <span>3. PLN ES UP 2</span>
+                                 </p>
+                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {renderSignatureBox(approved2Step)}
+                                    {renderSignatureBox(approved3Step)}
+                                 </div>
                               </div>
                            </div>
                         </div>
-                     );
-                  })}
+
+                        {/* Authenticity Verification Footer */}
+                        <div className="pt-3 border-t border-black flex flex-col sm:flex-row items-center justify-between text-[10px] text-black gap-2 page-break-inside-avoid">
+                           <div className="flex items-center gap-2.5">
+                              {qrCodeDataUrl ? (
+                                 <img
+                                    src={qrCodeDataUrl}
+                                    alt="QR Code Pengesahan"
+                                    className="w-10 h-10 object-contain"
+                                 />
+                              ) : (
+                                 <div className="p-1.5 bg-white border border-black">
+                                    <QrCode className="w-7 h-7 text-black" />
+                                 </div>
+                              )}
+                              <div>
+                                 <p className="font-bold text-black">
+                                    DOKUMEN ELEKTRONIK
+                                 </p>
+                                 <p className="text-[9.5px] text-black">
+                                    Otorisasi SEMAR PLN Electricity Services
+                                 </p>
+                                 <p className="text-[9.5px] text-black">
+                                    Unit Pelaksana 2 Jawa Tengah &amp; DI
+                                    Yogyakarta
+                                 </p>
+                              </div>
+                           </div>
+                           <div className="text-right font-mono text-[9.5px] flex flex-col items-end">
+                              <img
+                                 src={semarLogo}
+                                 alt="SEMAR Logo"
+                                 className="h-6 sm:h-7 w-auto object-contain flex-shrink-0 mb-0.5"
+                                 referrerPolicy="no-referrer"
+                              />
+                              <p className="text-black">
+                                 Waktu Cetak:{" "}
+                                 {new Date().toLocaleString("id-ID")}
+                              </p>
+                              <p className="text-black font-bold">
+                                 <span className="print:hidden">
+                                    Halaman 1 dari{" "}
+                                    {1 + submissionAttachments.length}
+                                 </span>
+                                 <span className="hidden print:inline-block page-counter"></span>
+                              </p>
+                           </div>
+                        </div>
+                     </div>
+
+                     {submissionAttachments.map((attachment, index) => {
+                        const isPdfAttachment =
+                           /\.pdf(?:$|\?)/i.test(attachment.url) ||
+                           /\.pdf$/i.test(attachment.fileName || "");
+                        return (
+                           <div
+                              key={`${attachment.url}-${index}`}
+                              className="printable-a4-document max-w-[210mm] min-h-[297mm] w-full mx-auto mt-4 bg-white border border-black p-5 sm:p-6 rounded-none text-black flex flex-col print:break-before-page"
+                           >
+                              <DocumentLetterhead
+                                 label="LAMPIRAN DOKUMEN PENGAJUAN"
+                                 numberLabel={`No: ${finalDocNo}`}
+                                 dateLabel={`Tgl Pengajuan: ${formatDateIndonesian(submission.tanggalPengajuan)}`}
+                              />
+
+                              <div className="my-4 border border-black p-3 flex-1 flex flex-col min-h-0">
+                                 <div className="mb-3 pb-2 border-b border-black">
+                                    <h3 className="text-sm font-extrabold uppercase tracking-wide">
+                                       {attachment.label}
+                                    </h3>
+                                    <p className="text-[10px] text-slate-700 mt-1 font-mono break-all">
+                                       Berkas: {attachment.fileName}
+                                    </p>
+                                 </div>
+                                 <AttachmentPreview
+                                    attachment={attachment}
+                                    isPdf={isPdfAttachment}
+                                 />
+                              </div>
+
+                              <div className="pt-3 border-t border-black flex flex-col sm:flex-row items-center justify-between text-[10px] text-black gap-2 page-break-inside-avoid">
+                                 <div className="flex items-center gap-2.5">
+                                    {qrCodeDataUrl ? (
+                                       <img
+                                          src={qrCodeDataUrl}
+                                          alt="QR Code Pengesahan"
+                                          className="w-10 h-10 object-contain"
+                                       />
+                                    ) : (
+                                       <div className="p-1.5 bg-white border border-black">
+                                          <QrCode className="w-7 h-7 text-black" />
+                                       </div>
+                                    )}
+                                    <div>
+                                       <p className="font-bold text-black">
+                                          DOKUMEN ELEKTRONIK
+                                       </p>
+                                       <p className="text-[9.5px] text-black">
+                                          Otorisasi SEMAR PLN Electricity
+                                          Services
+                                       </p>
+                                       <p className="text-[9.5px] text-black">
+                                          Unit Pelaksana 2 Jawa Tengah &amp; DI
+                                          Yogyakarta
+                                       </p>
+                                    </div>
+                                 </div>
+                                 <div className="text-right font-mono text-[9.5px] flex flex-col items-end">
+                                    <img
+                                       src={semarLogo}
+                                       alt="SEMAR Logo"
+                                       className="h-6 sm:h-7 w-auto object-contain mb-0.5"
+                                       referrerPolicy="no-referrer"
+                                    />
+                                    <p>
+                                       Waktu Cetak:{" "}
+                                       {new Date().toLocaleString("id-ID")}
+                                    </p>
+                                    <p className="font-bold">
+                                       Halaman {index + 2} dari{" "}
+                                       {submissionAttachments.length + 1}
+                                    </p>
+                                 </div>
+                              </div>
+                           </div>
+                        );
+                     })}
                   </>
                )}
             </div>
@@ -1632,5 +1723,31 @@ export const DocumentViewerModal = ({
             </div>
          </motion.div>
       </div>
+   );
+};
+
+export const DocumentViewerModal = (props) => {
+   const [documentSubmission, setDocumentSubmission] = useState(props.submission);
+
+   useEffect(() => {
+      let active = true;
+      setDocumentSubmission(props.submission);
+
+      if (props.isOpen && props.submission && !props.isReport) {
+         loadSubmissionDocumentData(props.submission).then((resolved) => {
+            if (active) setDocumentSubmission(resolved);
+         });
+      }
+
+      return () => {
+         active = false;
+      };
+   }, [props.isOpen, props.isReport, props.submission]);
+
+   return (
+      <DocumentViewerModalContent
+         {...props}
+         submission={documentSubmission}
+      />
    );
 };

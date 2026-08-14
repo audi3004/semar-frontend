@@ -82,7 +82,7 @@ function AppContent() {
   const [isMobileMode, setIsMobileMode] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (window.innerWidth < 768) return false;
-    return localStorage.getItem("epresensi_sidebar_open") !== "false";
+    return globalThis.appStorage.getItem("epresensi_sidebar_open") !== "false";
   });
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isQuickModalOpen, setIsQuickModalOpen] = useState(false);
@@ -134,7 +134,7 @@ function AppContent() {
   const refreshData = () => {
     try {
       setFetchError(null);
-      if (localStorage.getItem("epresensi_simulate_fetch_error") === "true") {
+      if (globalThis.appStorage.getItem("epresensi_simulate_fetch_error") === "true") {
         throw new Error("Network Timeout: Hubungan ke server pusat PT PLN Electricity Services terputus (504 Gateway Timeout).");
       }
       setSubmissions(DataService.getSubmissions() || []);
@@ -156,7 +156,7 @@ function AppContent() {
 
   useEffect(() => {
     if (window.innerWidth >= 768) {
-      localStorage.setItem("epresensi_sidebar_open", String(isSidebarOpen));
+      globalThis.appStorage.setItem("epresensi_sidebar_open", String(isSidebarOpen));
     }
   }, [isSidebarOpen]);
 
@@ -684,10 +684,10 @@ function AppContent() {
             >
               Coba Hubungkan Kembali
             </button>
-            {localStorage.getItem("epresensi_simulate_fetch_error") === "true" && (
+            {globalThis.appStorage.getItem("epresensi_simulate_fetch_error") === "true" && (
               <button
                 onClick={() => {
-                  localStorage.removeItem("epresensi_simulate_fetch_error");
+                  globalThis.appStorage.removeItem("epresensi_simulate_fetch_error");
                   refreshData();
                 }}
                 className="w-full sm:w-auto px-5 py-2.5 bg-amber-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-amber-700 transition cursor-pointer"

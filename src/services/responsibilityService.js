@@ -340,7 +340,7 @@ export class ResponsibilityService {
   }
 
   static getPermissions() {
-    const stored = localStorage.getItem(RESPONSIBILITY_STORAGE_KEY);
+    const stored = globalThis.appStorage.getItem(RESPONSIBILITY_STORAGE_KEY);
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
@@ -363,20 +363,20 @@ export class ResponsibilityService {
   }
 
   static savePermissions(matrix) {
-    localStorage.setItem(RESPONSIBILITY_STORAGE_KEY, JSON.stringify(matrix));
+    globalThis.appStorage.setItem(RESPONSIBILITY_STORAGE_KEY, JSON.stringify(matrix));
     // Dispatch event so all components react immediately
     window.dispatchEvent(new CustomEvent("responsibility-updated", { detail: matrix }));
   }
 
   static resetToDefault() {
-    localStorage.removeItem(RESPONSIBILITY_STORAGE_KEY);
+    globalThis.appStorage.removeItem(RESPONSIBILITY_STORAGE_KEY);
     const defaults = JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS));
     window.dispatchEvent(new CustomEvent("responsibility-updated", { detail: defaults }));
     return defaults;
   }
 
   static getUserPermissionsMap() {
-    const stored = localStorage.getItem(USER_RESPONSIBILITY_STORAGE_KEY);
+    const stored = globalThis.appStorage.getItem(USER_RESPONSIBILITY_STORAGE_KEY);
     if (stored) {
       try {
         return JSON.parse(stored) || {};
@@ -397,7 +397,7 @@ export class ResponsibilityService {
     if (!nip) return;
     const map = this.getUserPermissionsMap();
     map[String(nip)] = userPerms;
-    localStorage.setItem(USER_RESPONSIBILITY_STORAGE_KEY, JSON.stringify(map));
+    globalThis.appStorage.setItem(USER_RESPONSIBILITY_STORAGE_KEY, JSON.stringify(map));
     window.dispatchEvent(new CustomEvent("responsibility-updated", { detail: this.getPermissions() }));
   }
 
@@ -405,7 +405,7 @@ export class ResponsibilityService {
     if (!nip) return;
     const map = this.getUserPermissionsMap();
     delete map[String(nip)];
-    localStorage.setItem(USER_RESPONSIBILITY_STORAGE_KEY, JSON.stringify(map));
+    globalThis.appStorage.setItem(USER_RESPONSIBILITY_STORAGE_KEY, JSON.stringify(map));
     window.dispatchEvent(new CustomEvent("responsibility-updated", { detail: this.getPermissions() }));
   }
 

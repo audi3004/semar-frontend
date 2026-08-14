@@ -98,6 +98,7 @@ export const IjinPage = ({
     jumlahHariDisetujui: item.jumlah_hari_disetujui,
     keterangan: item.keterangan || "",
     status: normalizeStatus(item),
+    isFinal: item.status?.is_final === "Y",
     currentApproverRole: item.status?.role?.kode_role?.toLowerCase() || "maker"
   });
   const loadIjin = async () => {

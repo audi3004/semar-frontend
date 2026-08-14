@@ -173,6 +173,7 @@ export const SppdPage = ({ currentUser, submissions, onRefreshData }) => {
          ),
          makerSignatureUrl: resolveBackendFileUrl(item.maker_signature),
          status: normalizeStatus(item),
+         isFinal: item.status?.is_final === "Y",
          currentApproverRole:
             item.status?.role?.kode_role?.toLowerCase() || "maker",
       };

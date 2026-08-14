@@ -214,7 +214,7 @@ export default function MainLayout({
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
-      {showGlobalFilters && <div className="block md:hidden">
+      <div className="block md:hidden">
         <MobileNav
           currentUser={currentUser}
           activeTab={activeTab}
@@ -244,7 +244,7 @@ export default function MainLayout({
           isMobileFilterOpen={isMobileFilterOpen}
           setIsMobileFilterOpen={setIsMobileFilterOpen}
         />
-      </div>}
+      </div>
 
       {/* Quick Submission Selection Modal for Mobile */}
       {isQuickModalOpen && (

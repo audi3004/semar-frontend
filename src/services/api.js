@@ -3,52 +3,49 @@ import axios from "axios";
 const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 const API_BASE = /\/api$/i.test(API_BASE_URL) ? API_BASE_URL : `${API_BASE_URL}/api`;
 
-export const AUTH_STORAGE_KEYS = {
-  currentUser: "epresensi_current_user"
-};
-
-const REFRESH_TOKEN_COOKIE = "epresensi_refresh_token";
 let accessToken = null;
+let sessionUser = null;
+let activeRequestCount = 0;
+export const getActiveRequestCount = () => activeRequestCount;
 
-const readCookie = (name) => {
-  const prefix = `${encodeURIComponent(name)}=`;
-  const item = document.cookie.split("; ").find((cookie) => cookie.startsWith(prefix));
-  return item ? decodeURIComponent(item.slice(prefix.length)) : null;
+const notifyApiActivity = () => {
+  window.dispatchEvent(new CustomEvent("api:activity", { detail: { count: activeRequestCount } }));
 };
-
-const writeRefreshTokenCookie = (token, expiresAt) => {
-  if (!token) return;
-  const expires = expiresAt ? new Date(expiresAt) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const secure = window.location.protocol === "https:" ? "; Secure" : "";
-  document.cookie = `${REFRESH_TOKEN_COOKIE}=${encodeURIComponent(token)}; Path=/; Expires=${expires.toUTCString()}; SameSite=Lax${secure}`;
+const beginApiActivity = () => {
+  activeRequestCount += 1;
+  notifyApiActivity();
+};
+const endApiActivity = () => {
+  activeRequestCount = Math.max(0, activeRequestCount - 1);
+  notifyApiActivity();
+};
+const withApiActivity = async (operation) => {
+  beginApiActivity();
+  try {
+    return await operation();
+  } finally {
+    endApiActivity();
+  }
 };
 
 export const getAccessToken = () => accessToken;
-export const getRefreshToken = () => readCookie(REFRESH_TOKEN_COOKIE);
+export const getSessionUser = () => sessionUser;
 
 export const persistAuthSession = (authData) => {
   if (!authData?.access_token) throw new Error("Access token tidak ditemukan pada respons autentikasi");
   accessToken = authData.access_token;
-  if (authData.refresh_token) {
-    writeRefreshTokenCookie(authData.refresh_token, authData.refresh_token_expires_at);
-  }
-  if (authData.user) localStorage.setItem(AUTH_STORAGE_KEYS.currentUser, JSON.stringify(authData.user));
+  if (authData.user) sessionUser = authData.user;
 };
 
 export const clearAuthStorage = () => {
   accessToken = null;
-  Object.values(AUTH_STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
-  document.cookie = `${REFRESH_TOKEN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
-  // Bersihkan key token lama agar tidak digunakan kembali oleh versi terdahulu.
-  localStorage.removeItem("epresensi_access_token");
-  localStorage.removeItem("epresensi_refresh_token");
-  localStorage.removeItem("epresensi_token");
-  localStorage.removeItem("token");
+  sessionUser = null;
 };
 
 // Create Axios Instance with Authorization Bearer token interceptor
 const apiClient = axios.create({
   baseURL: API_BASE,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json"
   }
@@ -56,6 +53,8 @@ const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   (config) => {
+    beginApiActivity();
+    config._activityTracked = true;
     if (config.data instanceof FormData) {
       // Browser harus membuat multipart boundary secara otomatis.
       delete config.headers["Content-Type"];
@@ -66,33 +65,37 @@ apiClient.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    endApiActivity();
+    return Promise.reject(error);
+  }
 );
 
 let refreshPromise = null;
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (response.config?._activityTracked) endApiActivity();
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
+    if (originalRequest?._activityTracked) {
+      endApiActivity();
+      originalRequest._activityTracked = false;
+    }
     const isAuthRequest = originalRequest?.url?.includes("/auth/login") || originalRequest?.url?.includes("/auth/refresh");
 
     if (error.response?.status !== 401 || originalRequest?._retry || isAuthRequest) {
       return Promise.reject(error);
     }
 
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) {
-      clearAuthStorage();
-      window.dispatchEvent(new Event("auth:session-expired"));
-      return Promise.reject(error);
-    }
-
     originalRequest._retry = true;
 
     try {
-      refreshPromise ||= axios
-        .post(`${API_BASE}/auth/refresh`, { refresh_token: refreshToken }, {
+      refreshPromise ||= withApiActivity(() => axios
+        .post(`${API_BASE}/auth/refresh`, {}, {
+          withCredentials: true,
           headers: { "Content-Type": "application/json" }
         })
         .then((response) => {
@@ -105,7 +108,7 @@ apiClient.interceptors.response.use(
         })
         .finally(() => {
           refreshPromise = null;
-        });
+        }));
 
       const accessToken = await refreshPromise;
       originalRequest.headers.Authorization = `Bearer ${accessToken}`;
@@ -133,16 +136,35 @@ export const api = {
     };
   },
 
+  getCompletedDocuments: async (params = {}) => {
+    const res = await apiClient.get("/dashboard/documents", { params });
+    return res.data?.data || [];
+  },
+
   getReportPermohonan: async (params = {}) => {
     const res = await apiClient.get("/reports/permohonan", { params });
     return res.data?.data || { transactions: [], summary: {} };
   },
 
+  createReportPermohonan: async (payload) => {
+    const res = await apiClient.post("/reports/permohonan", payload);
+    return res.data?.data;
+  },
+
+  signReportPermohonan: async (id, signature) => {
+    const res = await apiClient.post(`/reports/permohonan/${id}/sign`, { signature });
+    return res.data?.data;
+  },
+
+  getReportPermohonanExport: async (id) => {
+    const res = await apiClient.get(`/reports/permohonan/${id}/export`);
+    return res.data?.data;
+  },
+
   // Reset cache / storage helper
   resetCache: async () => {
     try {
-      localStorage.clear();
-      sessionStorage.clear();
+      globalThis.appStorage.clear();
       const res = await apiClient.post("/auth/reset-cache").catch(() => null);
       return res?.data || { success: true, message: "Storage cleared" };
     } catch {
@@ -166,17 +188,16 @@ export const api = {
     return response.data;
   },
 
-  refreshToken: async (refreshToken) => {
-    const response = await axios.post(`${API_BASE}/auth/refresh`, { refresh_token: refreshToken });
+  refreshToken: async () => {
+    const response = await withApiActivity(() => axios.post(`${API_BASE}/auth/refresh`, {}, { withCredentials: true }));
     return response.data;
   },
 
   restoreSession: async () => {
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) return null;
-    const response = await axios.post(`${API_BASE}/auth/refresh`, { refresh_token: refreshToken }, {
+    const response = await withApiActivity(() => axios.post(`${API_BASE}/auth/refresh`, {}, {
+      withCredentials: true,
       headers: { "Content-Type": "application/json" }
-    });
+    }));
     const authData = response.data?.data;
     persistAuthSession(authData);
     return authData;

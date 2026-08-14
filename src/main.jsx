@@ -1,6 +1,8 @@
 import { createRoot } from "react-dom/client";
+import "./services/volatileStorage";
 import App from "./App.jsx";
 import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
+import { GlobalApiLoading } from "./components/common/GlobalApiLoading.jsx";
 import "./index.css";
 
 // Suppress benign iframe-resize or concurrent rendering fallback warnings
@@ -43,6 +45,7 @@ if (typeof window !== "undefined") {
 
 createRoot(document.getElementById("root")).render(
   <ErrorBoundary>
-    <App />
+      <App />
+      <GlobalApiLoading />
   </ErrorBoundary>
 );

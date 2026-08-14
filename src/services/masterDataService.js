@@ -1,5 +1,4 @@
 import { z } from "zod";
-import axios from "axios";
 import { api } from "./api";
 import { AuthService } from "./authService";
 import { toast } from "../utils/toast";
@@ -579,14 +578,14 @@ export class MasterDataService {
       sources.map(async ([table, endpoint]) => {
         const response = await api.client.get(endpoint, { params: { limit: 1000 } });
         const records = this.normalizeApiRecords(table, response.data?.data || []);
-        localStorage.setItem(getStorageKey(table), JSON.stringify(records));
+        globalThis.appStorage.setItem(getStorageKey(table), JSON.stringify(records));
         return { table, count: records.length };
       })
     );
 
     // UMK juga menjadi referensi upah dasar pada UI yang sudah ada.
-    const umkRecords = this.safeParseList(localStorage.getItem(getStorageKey("m_umk")));
-    localStorage.setItem(getStorageKey("m_upah_dasar"), JSON.stringify(this.normalizeApiRecords("m_upah_dasar", umkRecords)));
+    const umkRecords = this.safeParseList(globalThis.appStorage.getItem(getStorageKey("m_umk")));
+    globalThis.appStorage.setItem(getStorageKey("m_upah_dasar"), JSON.stringify(this.normalizeApiRecords("m_upah_dasar", umkRecords)));
 
     const failed = results.filter((result) => result.status === "rejected");
     const succeeded = results.filter((result) => result.status === "fulfilled");
@@ -603,7 +602,7 @@ export class MasterDataService {
       return [];
     }
   }
-  // Initialize standard records if empty in localStorage
+  // Initialize standard records if empty in globalThis.appStorage
   static initLocalStorage() {
     const defaultData = {
       m_role: INITIAL_ROLES,
@@ -624,9 +623,9 @@ export class MasterDataService {
       m_jenis_lembur: INITIAL_JENIS_LEMBUR
     };
     Object.keys(defaultData).forEach((key) => {
-      const stored = localStorage.getItem(getStorageKey(key));
+      const stored = globalThis.appStorage.getItem(getStorageKey(key));
       if (!stored) {
-        localStorage.setItem(getStorageKey(key), JSON.stringify(defaultData[key]));
+        globalThis.appStorage.setItem(getStorageKey(key), JSON.stringify(defaultData[key]));
       } else if (key === "m_umk" || key === "m_upah_dasar") {
         let parsed = this.safeParseList(stored);
         let updated = false;
@@ -640,7 +639,7 @@ export class MasterDataService {
           return item;
         });
         if (updated) {
-          localStorage.setItem(getStorageKey(key), JSON.stringify(parsed));
+          globalThis.appStorage.setItem(getStorageKey(key), JSON.stringify(parsed));
         }
       } else if (key === "m_project") {
         let parsed = this.safeParseList(stored);
@@ -654,7 +653,7 @@ export class MasterDataService {
         ];
         const hasOldDefaults = parsed.some((p) => oldDefaultNames.includes(p.nama_project));
         if (hasOldDefaults || parsed.length === 0) {
-          localStorage.setItem(getStorageKey(key), JSON.stringify(INITIAL_PROJECTS));
+          globalThis.appStorage.setItem(getStorageKey(key), JSON.stringify(INITIAL_PROJECTS));
         } else {
           INITIAL_PROJECTS.forEach((initP) => {
             const idx = parsed.findIndex((p) => Number(p.id_project) === Number(initP.id_project));
@@ -669,7 +668,7 @@ export class MasterDataService {
             }
           });
           if (updated) {
-            localStorage.setItem(getStorageKey(key), JSON.stringify(parsed));
+            globalThis.appStorage.setItem(getStorageKey(key), JSON.stringify(parsed));
           }
         }
       } else if (key === "m_unit") {
@@ -683,25 +682,25 @@ export class MasterDataService {
           }
         });
         if (updated) {
-          localStorage.setItem(getStorageKey(key), JSON.stringify(parsed));
+          globalThis.appStorage.setItem(getStorageKey(key), JSON.stringify(parsed));
         }
       } else if (key === "m_jenis_lembur") {
         let parsed = this.safeParseList(stored);
         const originalLen = parsed.length;
         parsed = parsed.filter((item) => item.jenis_pekerjaan !== "Pengganti Piket" && item.id_jenis !== "005.002.");
         if (parsed.length !== originalLen) {
-          localStorage.setItem(getStorageKey(key), JSON.stringify(parsed));
+          globalThis.appStorage.setItem(getStorageKey(key), JSON.stringify(parsed));
         }
       }
     });
-    if (!localStorage.getItem("pln_transaksi_data")) {
-      localStorage.setItem("pln_transaksi_data", JSON.stringify(INITIAL_TRANSACTIONS));
+    if (!globalThis.appStorage.getItem("pln_transaksi_data")) {
+      globalThis.appStorage.setItem("pln_transaksi_data", JSON.stringify(INITIAL_TRANSACTIONS));
     }
   }
   // Retrieve Master List with Pagination, Search & Sorting capabilities (TUGAS 2.B)
   static getAll(table, params = {}) {
     this.initLocalStorage();
-    const stored = localStorage.getItem(getStorageKey(table));
+    const stored = globalThis.appStorage.getItem(getStorageKey(table));
     let rawList = this.safeParseList(stored);
     if (params.search) {
       const searchLower = params.search.toLowerCase();
@@ -747,7 +746,7 @@ export class MasterDataService {
   // Retrieve Single Record (TUGAS 2.B)
   static getById(table, id) {
     this.initLocalStorage();
-    const stored = localStorage.getItem(getStorageKey(table));
+    const stored = globalThis.appStorage.getItem(getStorageKey(table));
     const rawList = this.safeParseList(stored);
     const pkName = this.getPrimaryKeyName(table);
     return rawList.find((item) => String(item[pkName]) === String(id));
@@ -764,7 +763,7 @@ export class MasterDataService {
       return { success: false, error: errMsg };
     }
     const payload = validation.data;
-    const stored = localStorage.getItem(getStorageKey(table));
+    const stored = globalThis.appStorage.getItem(getStorageKey(table));
     const rawList = this.safeParseList(stored);
     const pkName = this.getPrimaryKeyName(table);
     if (rawList.some((item) => String(item[pkName]) === String(payload[pkName]))) {
@@ -773,7 +772,7 @@ export class MasterDataService {
       return { success: false, error: errMsg };
     }
     rawList.push(payload);
-    localStorage.setItem(getStorageKey(table), JSON.stringify(rawList));
+    globalThis.appStorage.setItem(getStorageKey(table), JSON.stringify(rawList));
     if (table === "t_mutasi") {
       const mut = payload;
       this.applyMutasiToPegawai(mut.id_pegawai, mut.id_mutasi, mut.id_unit_upt, mut.id_unit_ultg, mut.id_unit_gi);
@@ -794,7 +793,7 @@ export class MasterDataService {
       return { success: false, error: errMsg };
     }
     const payload = validation.data;
-    const stored = localStorage.getItem(getStorageKey(table));
+    const stored = globalThis.appStorage.getItem(getStorageKey(table));
     const rawList = this.safeParseList(stored);
     const pkName = this.getPrimaryKeyName(table);
     const index = rawList.findIndex((item) => String(item[pkName]) === String(id));
@@ -804,7 +803,7 @@ export class MasterDataService {
       return { success: false, error: errMsg };
     }
     rawList[index] = payload;
-    localStorage.setItem(getStorageKey(table), JSON.stringify(rawList));
+    globalThis.appStorage.setItem(getStorageKey(table), JSON.stringify(rawList));
     const label = table.replace(/^m_/, "").replace(/^t_/, "").replace(/_/g, " ").toUpperCase();
     toast.success(`Data ${label} berhasil diperbarui!`);
     return { success: true, data: payload };
@@ -812,7 +811,7 @@ export class MasterDataService {
   // Delete / Soft Delete with Foreign Key integrity check (TUGAS 2.B)
   static delete(table, id) {
     this.initLocalStorage();
-    const stored = localStorage.getItem(getStorageKey(table));
+    const stored = globalThis.appStorage.getItem(getStorageKey(table));
     const rawList = this.safeParseList(stored);
     const pkName = this.getPrimaryKeyName(table);
     const itemToDelete = rawList.find((item) => String(item[pkName]) === String(id));
@@ -837,10 +836,10 @@ export class MasterDataService {
         }
         return item;
       });
-      localStorage.setItem(getStorageKey(table), JSON.stringify(updatedList));
+      globalThis.appStorage.setItem(getStorageKey(table), JSON.stringify(updatedList));
     } else {
       const filtered = rawList.filter((item) => String(item[pkName]) !== String(id));
-      localStorage.setItem(getStorageKey(table), JSON.stringify(filtered));
+      globalThis.appStorage.setItem(getStorageKey(table), JSON.stringify(filtered));
     }
     const label = table.replace(/^m_/, "").replace(/^t_/, "").replace(/_/g, " ").toUpperCase();
     toast.success(`Data ${label} berhasil dihapus!`);
@@ -848,7 +847,7 @@ export class MasterDataService {
   }
   // Fetch all transactions that map to id_pegawai or id_app
   static getTransactionsMapped(id_pegawai, id_app) {
-    const rawTx = localStorage.getItem("pln_transaksi_data");
+    const rawTx = globalThis.appStorage.getItem("pln_transaksi_data");
     let tx = INITIAL_TRANSACTIONS;
     if (rawTx) {
       try {
@@ -970,7 +969,7 @@ export class MasterDataService {
     const endpoint = API_ENDPOINTS[table];
     if (endpoint) {
       try {
-        const res = await axios.post(endpoint, rawPayload);
+        const res = await api.client.post(endpoint.replace(/^\/api/, ""), rawPayload);
         if (res.data && res.data.success) {
           return { success: true, data: res.data.data, message: res.data.message || "Data berhasil disimpan via REST API" };
         }
@@ -985,7 +984,7 @@ export class MasterDataService {
     const endpoint = API_ENDPOINTS[table];
     if (endpoint) {
       try {
-        const res = await axios.put(`${endpoint}/${id}`, rawPayload);
+        const res = await api.client.put(`${endpoint.replace(/^\/api/, "")}/${id}`, rawPayload);
         if (res.data && res.data.success) {
           return { success: true, data: res.data.data, message: res.data.message || "Data berhasil diperbarui via REST API" };
         }
@@ -1000,7 +999,7 @@ export class MasterDataService {
     const endpoint = API_ENDPOINTS[table];
     if (endpoint) {
       try {
-        const res = await axios.delete(`${endpoint}/${id}`);
+        const res = await api.client.delete(`${endpoint.replace(/^\/api/, "")}/${id}`);
         if (res.data && res.data.success) {
           return { success: true, message: res.data.message || "Data berhasil dihapus via REST API" };
         }
@@ -1055,7 +1054,7 @@ export class MasterDataService {
     return { safe: true };
   }
   static applyMutasiToPegawai(idPeg, idMut, upt, ultg, gi) {
-    const stored = localStorage.getItem(getStorageKey("m_pegawai"));
+    const stored = globalThis.appStorage.getItem(getStorageKey("m_pegawai"));
     if (!stored) return;
     const pegawais = JSON.parse(stored);
     const index = pegawais.findIndex((p) => p.id_pegawai === idPeg);
@@ -1064,7 +1063,7 @@ export class MasterDataService {
       pegawais[index].id_unit_upt = upt;
       pegawais[index].id_unit_ultg = ultg;
       pegawais[index].id_unit_gi = gi;
-      localStorage.setItem(getStorageKey("m_pegawai"), JSON.stringify(pegawais));
+      globalThis.appStorage.setItem(getStorageKey("m_pegawai"), JSON.stringify(pegawais));
     }
   }
   // TUGAS 1.A: ORM/SQL Mapping documentation for the five transaction tables
@@ -1133,11 +1132,11 @@ export class MasterDataService {
 
   // Active UMK Year & Salary Basis Generator Helpers (Task 1 & Task 2)
   static getActiveUmkYear() {
-    return localStorage.getItem("pln_active_umk_year") || "2026";
+    return globalThis.appStorage.getItem("pln_active_umk_year") || "2026";
   }
 
   static setActiveUmkYear(year) {
-    localStorage.setItem("pln_active_umk_year", String(year));
+    globalThis.appStorage.setItem("pln_active_umk_year", String(year));
   }
 
   static generateSalaryBasis(targetYear) {

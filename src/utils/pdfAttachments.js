@@ -1,5 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { resolveBackendFileUrl } from "./fileUrl";
+import { getAccessToken } from "../services/api";
+import { compressAndResizeImage } from "./imageCompressor";
 
 const A4 = { width: 595.28, height: 841.89 };
 
@@ -34,33 +36,13 @@ export const getSubmissionAttachments = (submission = {}) => {
   return attachments;
 };
 
-const imageToPng = async (blob) => {
-  const objectUrl = URL.createObjectURL(blob);
-  try {
-    const image = await new Promise((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = reject;
-      element.src = objectUrl;
-    });
-    const canvas = document.createElement("canvas");
-    canvas.width = image.naturalWidth;
-    canvas.height = image.naturalHeight;
-    canvas.getContext("2d").drawImage(image, 0, 0);
-    return await new Promise((resolve, reject) => canvas.toBlob(
-      (png) => (png ? png.arrayBuffer().then(resolve, reject) : reject(new Error("Konversi gambar gagal"))),
-      "image/png",
-    ));
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-};
-
 const appendImage = async (target, bytes, contentType, attachment, font) => {
-  let embedded;
-  if (contentType.includes("png")) embedded = await target.embedPng(bytes);
-  else if (contentType.includes("jpeg") || contentType.includes("jpg")) embedded = await target.embedJpg(bytes);
-  else embedded = await target.embedPng(await imageToPng(new Blob([bytes], { type: contentType })));
+  const optimized = await compressAndResizeImage(bytes, {
+    maxWidth: 1200,
+    maxHeight: 1600,
+    quality: 0.8,
+  });
+  const embedded = await target.embedJpg(optimized.bytes);
 
   const page = target.addPage([A4.width, A4.height]);
   page.drawText(`LAMPIRAN - ${attachment.label}`, { x: 36, y: A4.height - 42, size: 11, font, color: rgb(0.05, 0.25, 0.42) });
@@ -74,6 +56,45 @@ const appendImage = async (target, bytes, contentType, attachment, font) => {
   page.drawImage(embedded, { x: (A4.width - width) / 2, y: 30 + (availableHeight - height) / 2, width, height });
 };
 
+export const appendPdfBlobAttachment = async (target, pdfInput, attachment = {}) => {
+  const bytes = pdfInput instanceof Blob || pdfInput instanceof File
+    ? await pdfInput.arrayBuffer()
+    : pdfInput;
+  if (!(bytes instanceof ArrayBuffer)) {
+    throw new Error("Input PDF harus berupa Blob, File, atau ArrayBuffer");
+  }
+
+  const source = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  const sourcePages = source.getPages();
+  if (!sourcePages.length) return;
+
+  const font = await target.embedFont(StandardFonts.HelveticaBold);
+  const embeddedPages = await target.embedPages(sourcePages);
+  embeddedPages.forEach((embeddedPage, index) => {
+    const page = target.addPage([A4.width, A4.height]);
+    page.drawText(`LAMPIRAN - ${attachment.label || "DOKUMEN"}`, {
+      x: 36, y: A4.height - 42, size: 11, font, color: rgb(0.05, 0.25, 0.42),
+    });
+    const pageLabel = embeddedPages.length > 1
+      ? ` (Halaman ${index + 1} dari ${embeddedPages.length})`
+      : "";
+    page.drawText(`${attachment.fileName || "dokumen.pdf"}${pageLabel}`, {
+      x: 36, y: A4.height - 59, size: 7, font, color: rgb(0.35, 0.35, 0.35), maxWidth: A4.width - 72,
+    });
+    const availableWidth = A4.width - 72;
+    const availableHeight = A4.height - 112;
+    const scale = Math.min(availableWidth / embeddedPage.width, availableHeight / embeddedPage.height);
+    const width = embeddedPage.width * scale;
+    const height = embeddedPage.height * scale;
+    page.drawPage(embeddedPage, {
+      x: (A4.width - width) / 2,
+      y: 30 + (availableHeight - height) / 2,
+      width,
+      height,
+    });
+  });
+};
+
 export const appendSubmissionAttachments = async (mainBlob, submission) => {
   const attachments = getSubmissionAttachments(submission);
   if (!attachments.length) return mainBlob;
@@ -83,16 +104,18 @@ export const appendSubmissionAttachments = async (mainBlob, submission) => {
 
   for (const attachment of attachments) {
     try {
-      const response = await fetch(attachment.url);
+      const token = getAccessToken();
+      const response = await fetch(attachment.url, {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const contentType = (response.headers.get("content-type") || "").toLowerCase();
       const bytes = await response.arrayBuffer();
       const isPdf = contentType.includes("pdf") || attachment.fileName.toLowerCase().endsWith(".pdf");
 
       if (isPdf) {
-        const source = await PDFDocument.load(bytes);
-        const pages = await target.copyPages(source, source.getPageIndices());
-        pages.forEach((page) => target.addPage(page));
+        await appendPdfBlobAttachment(target, bytes, attachment);
       } else if (contentType.startsWith("image/") || /\.(jpe?g|png|webp)$/i.test(attachment.fileName)) {
         await appendImage(target, bytes, contentType, attachment, font);
       }

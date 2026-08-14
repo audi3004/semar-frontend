@@ -61,9 +61,6 @@ const UnitRolePage = ({ currentUser }) => {
       .then((data) => {
         if (!active) return;
         setAssignments(data);
-        setCheckedUnitIds(new Set(
-          data.filter((item) => item.is_active === "Y").map((item) => Number(item.id_unit))
-        ));
       })
       .catch((error) => {
         if (!active) return;
@@ -81,6 +78,16 @@ const UnitRolePage = ({ currentUser }) => {
     [users, selectedUserId]
   );
   const identity = selectedUser?.pegawai || selectedUser?.petugas || {};
+  const assignedRoles = useMemo(() => {
+    const byId = new Map();
+    assignments.filter((item) => item.is_active === "Y").forEach((item) => {
+      const role = item.role || selectedUser?.role;
+      const key = role?.id_role || item.id_role;
+      if (key && !byId.has(String(key))) byId.set(String(key), role || { nama_role: `Role #${key}` });
+    });
+    if (!byId.size && selectedUser?.role) byId.set(String(selectedUser.role.id_role), selectedUser.role);
+    return [...byId.values()];
+  }, [assignments, selectedUser]);
 
   const filteredUsers = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -113,9 +120,58 @@ const UnitRolePage = ({ currentUser }) => {
     setExpandedUnitIds(new Set(unitTree.roots.map((unit) => Number(unit.id_unit))));
   }, [unitTree]);
 
-  const savedUnitIds = useMemo(() => new Set(
-    assignments.filter((item) => item.is_active === "Y").map((item) => Number(item.id_unit))
-  ), [assignments]);
+  useEffect(() => {
+    if (!selectedUserId || isAssignmentsLoading) return;
+    const checked = new Set();
+    const expanded = new Set(unitTree.roots.map((unit) => Number(unit.id_unit)));
+    const parentByChild = new Map();
+    units.forEach((unit) => {
+      if (unit.id_induk_unit != null) parentByChild.set(Number(unit.id_unit), Number(unit.id_induk_unit));
+    });
+
+    const includeDescendants = (unitId) => {
+      const queue = [Number(unitId)];
+      while (queue.length) {
+        const current = queue.shift();
+        checked.add(current);
+        const children = unitTree.childrenByParent.get(current) || [];
+        if (children.length) expanded.add(current);
+        children.forEach((child) => queue.push(Number(child.id_unit)));
+      }
+    };
+
+    assignments.filter((item) => item.is_active === "Y").forEach((item) => {
+      const unitId = Number(item.id_unit);
+      if (item.scope_type === "SELF_AND_DESCENDANTS") includeDescendants(unitId);
+      else checked.add(unitId);
+      let parentId = parentByChild.get(unitId);
+      while (parentId) {
+        expanded.add(parentId);
+        parentId = parentByChild.get(parentId);
+      }
+    });
+    setCheckedUnitIds(checked);
+    setExpandedUnitIds(expanded);
+  }, [assignments, isAssignmentsLoading, selectedUserId, unitTree, units]);
+
+  const savedUnitIds = useMemo(() => {
+    const result = new Set();
+    assignments.filter((item) => item.is_active === "Y").forEach((item) => {
+      const rootId = Number(item.id_unit);
+      result.add(rootId);
+      if (item.scope_type !== "SELF_AND_DESCENDANTS") return;
+      const queue = [rootId];
+      while (queue.length) {
+        const current = queue.shift();
+        (unitTree.childrenByParent.get(current) || []).forEach((child) => {
+          const childId = Number(child.id_unit);
+          result.add(childId);
+          queue.push(childId);
+        });
+      }
+    });
+    return result;
+  }, [assignments, unitTree]);
 
   const isDirty = checkedUnitIds.size !== savedUnitIds.size
     || [...checkedUnitIds].some((id) => !savedUnitIds.has(id));
@@ -135,6 +191,17 @@ const UnitRolePage = ({ currentUser }) => {
         (unitTree.childrenByParent.get(currentUnitId) || []).forEach((child) => {
           queue.push(Number(child.id_unit));
         });
+      }
+
+      if (!shouldCheck) {
+        const parentByChild = new Map(units
+          .filter((unit) => unit.id_induk_unit != null)
+          .map((unit) => [Number(unit.id_unit), Number(unit.id_induk_unit)]));
+        let parentId = parentByChild.get(Number(unitId));
+        while (parentId) {
+          next.delete(parentId);
+          parentId = parentByChild.get(parentId);
+        }
       }
 
       return next;
@@ -165,8 +232,21 @@ const UnitRolePage = ({ currentUser }) => {
       if (!map.has(unitId)) map.set(unitId, assignment);
     });
 
-    const removed = [...savedUnitIds].filter((id) => !checkedUnitIds.has(id));
-    const added = [...checkedUnitIds].filter((id) => !savedUnitIds.has(id));
+    const parentByChild = new Map(units
+      .filter((unit) => unit.id_induk_unit != null)
+      .map((unit) => [Number(unit.id_unit), Number(unit.id_induk_unit)]));
+    const desiredRoots = [...checkedUnitIds].filter((id) => {
+      let parentId = parentByChild.get(id);
+      while (parentId) {
+        if (checkedUnitIds.has(parentId)) return false;
+        parentId = parentByChild.get(parentId);
+      }
+      return true;
+    });
+    const activeDirectIds = new Set(activeByUnit.keys());
+    const desiredRootSet = new Set(desiredRoots);
+    const removed = [...activeDirectIds].filter((id) => !desiredRootSet.has(id));
+    const added = desiredRoots.filter((id) => !activeDirectIds.has(id));
     setIsSubmitting(true);
     try {
       await Promise.all([
@@ -180,7 +260,7 @@ const UnitRolePage = ({ currentUser }) => {
             id_user: Number(selectedUser.id_user),
             id_unit: unitId,
             id_role: Number(selectedUser.id_role),
-            scope_type: "SELF",
+            scope_type: "SELF_AND_DESCENDANTS",
             is_active: "Y"
           };
           return inactive
@@ -313,11 +393,15 @@ const UnitRolePage = ({ currentUser }) => {
               </div>
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5">
-              <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Default Role</p>
-              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-extrabold">
-                <ShieldCheck className="w-4 h-4" />{selectedUser.role?.nama_role || "Belum memiliki role"}
+              <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Role yang dimiliki</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {assignedRoles.length ? assignedRoles.map((role) => (
+                  <div key={role.id_role || role.nama_role} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-extrabold">
+                    <ShieldCheck className="w-4 h-4" />{role.nama_role || role.kode_role}
+                  </div>
+                )) : <span className="text-xs font-bold text-slate-500">Belum memiliki role</span>}
               </div>
-              <p className="text-[10px] text-slate-400 mt-2">Role mengikuti profil user dan bersifat read-only.</p>
+              <p className="text-[10px] text-slate-400 mt-2">Hierarchy di bawah langsung terbuka sesuai cakupan role aktif.</p>
             </div>
           </section>
 

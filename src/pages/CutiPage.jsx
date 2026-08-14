@@ -83,6 +83,7 @@ export const CutiPage = ({
     makerSignatureUrl: resolveBackendFileUrl(item.maker_signature),
     keterangan: item.perihal || "",
     status: normalizeStatus(item),
+    isFinal: item.status?.is_final === "Y",
     currentApproverRole: item.status?.role?.kode_role?.toLowerCase() || "maker"
   });
   const loadCuti = async () => {

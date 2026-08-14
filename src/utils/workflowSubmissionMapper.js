@@ -55,6 +55,12 @@ const buildApprovalSteps = (item, workflowHistory) =>
     };
   });
 
+export const withWorkflowApprovalIdentities = (submission, workflowHistory = []) => ({
+  ...submission,
+  workflowHistory,
+  approvalSteps: buildApprovalSteps(submission, workflowHistory)
+});
+
 const workflowRole = (item) =>
   ROLE_MAP[String(item.status?.role?.kode_role || "").toUpperCase()] || "maker";
 
@@ -105,6 +111,8 @@ const common = (item, type, id) => {
     unitUltg: findUnitName(/\bULTG\b/i),
     garduInduk: findUnitName(/\b(GI|GARDU INDUK)\b/i),
     status: workflowStatus(item),
+    statusCode: item.status?.kode_status || "",
+    isFinal: item.status?.is_final === "Y",
     currentApproverRole: workflowRole(item),
     workflowHistory,
     approvalSteps: buildApprovalSteps(item, workflowHistory),

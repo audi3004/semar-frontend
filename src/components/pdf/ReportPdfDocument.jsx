@@ -364,7 +364,7 @@ export const ReportPdfDocument = ({
          ? filterInfo.selectedYear
          : filterInfo.year || new Date().getFullYear();
 
-   const defaultDocNoStr = `${seqNumStr}/REKAP-${singkatanUpt}/PLN-ES/${bulanKapital}/${yearStr}`;
+   const defaultDocNoStr = filterInfo.nomorDokumen || `${seqNumStr}/REKAP-${singkatanUpt}/PLN-ES/${bulanKapital}/${yearStr}`;
    const docNoStr = docNoStrProp || defaultDocNoStr;
 
    const title = titleProp || "LAPORAN DOKUMEN ELEKTRONIK";
@@ -648,8 +648,9 @@ export const ReportPdfDocument = ({
                               {sig.name || "(.........................)"}
                            </Text>
                            <Text style={styles.sigNip}>
-                              {sig.nip ? `NIP. ${sig.nip}` : sig.jabatan || ""}
+                              {sig.nip ? `NIP. ${sig.nip}` : "NIP. -"}
                            </Text>
+                           {sig.jabatan ? <Text style={styles.sigNip}>{sig.jabatan}</Text> : null}
                         </View>
                      );
                   })}

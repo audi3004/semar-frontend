@@ -5,9 +5,12 @@ import { SubmissionPdfDocument } from "../components/pdf/SubmissionPdfDocument";
 import { ReportPdfDocument } from "../components/pdf/ReportPdfDocument";
 import { getFormattedDocNo } from "../utils/formatters";
 import { appendSubmissionAttachments } from "../utils/pdfAttachments";
+import { loadSubmissionDocumentData } from "./submissionDocumentService";
+import { isSubmissionFinalApproved } from "../utils/submissionStatus";
 
 export class PdfService {
   static async generateSubmissionBlob(submission) {
+    submission = await loadSubmissionDocumentData(submission);
     let qrCodeDataUrl = "";
     try {
       const finalDocNo = getFormattedDocNo(submission);
@@ -33,6 +36,10 @@ export class PdfService {
    * Downloads A4 PDF Document
    */
   static async downloadPdf(submission) {
+    submission = await loadSubmissionDocumentData(submission);
+    if (!isSubmissionFinalApproved(submission)) {
+      throw new Error("PDF hanya dapat diunduh setelah transaksi selesai disetujui.");
+    }
     const blob = await this.generateSubmissionBlob(submission);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");

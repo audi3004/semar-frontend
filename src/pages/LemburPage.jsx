@@ -126,6 +126,17 @@ const unpackCategory = (value = "") => {
       String(value).split(CATEGORY_SEPARATOR);
    return { kategoriLembur, jenisPekerjaan };
 };
+const isPhotoEvidenceOptional = (category = "", jobType = "") => {
+   const value = `${category} ${jobType}`.trim().toLowerCase();
+   return [
+      "pengganti cuti",
+      "cuti pengganti",
+      "cuti penganti",
+      "pengganti piket",
+      "libur nasional",
+      "tanggal merah",
+   ].some((keyword) => value.includes(keyword));
+};
 const mapApiLembur = (item) => {
    const legacyCategory = unpackCategory(item.kategori_lembur);
    const category = {
@@ -298,7 +309,7 @@ export const LemburPage = ({
          const idPetugas =
             currentUser?.id_petugas || currentUser?.petugas?.id_petugas;
          const [lemburRows, petugasRows] = await Promise.all([
-            idPetugas ? api.getLemburByPetugas(idPetugas) : api.getLembur(),
+            api.getLembur(),
             api.getPetugas(),
          ]);
          setApiLembur(
@@ -376,6 +387,10 @@ export const LemburPage = ({
    const isOperatorCuti =
       jenisPekerjaan === "Pengganti Piket (Operator sedang cuti)";
    const isSiagaLibur = jenisPekerjaan === "Siaga / Libur Nasional";
+   const areActivityPhotosOptional = isPhotoEvidenceOptional(
+      kategoriLembur,
+      jenisPekerjaan,
+   );
    const isFixedEightHourMaker =
       currentUser?.role === "maker" && (isOperatorCuti || isSiagaLibur);
 
@@ -703,10 +718,14 @@ export const LemburPage = ({
       const isCreate = !editingSub?.id_lembur;
       if (
          isCreate &&
-         (!fotoKegiatan1File || !fotoKegiatan2File || !suratPerintahFile)
+         (!suratPerintahFile ||
+            (!areActivityPhotosOptional &&
+               (!fotoKegiatan1File || !fotoKegiatan2File)))
       ) {
          throw new Error(
-            "Backend mewajibkan Foto Kegiatan 1, Foto Kegiatan 2, dan Surat Perintah Lembur saat membuat data.",
+            areActivityPhotosOptional
+               ? "Backend mewajibkan Surat Perintah Lembur saat membuat data."
+               : "Backend mewajibkan Foto Kegiatan 1, Foto Kegiatan 2, dan Surat Perintah Lembur saat membuat data.",
          );
       }
       const response = isCreate
@@ -877,7 +896,7 @@ export const LemburPage = ({
          return;
       }
 
-      if (kategoriLembur !== "Piket Tanggal Merah / Cuti Pengganti") {
+      if (!areActivityPhotosOptional) {
          if (!fotoDokumentasi1Url || !fotoDokumentasi2Url) {
             setAlertModal({
                isOpen: true,
@@ -2515,8 +2534,7 @@ export const LemburPage = ({
                         </p>
 
                         {/* Task 2: Jika Kategori Pekerjaan selain Piket Tanggal Merah / Cuti Pengganti, tampilkan Foto 1 dan Foto 2 (Wajib Diisi) */}
-                        {kategoriLembur !==
-                           "Piket Tanggal Merah / Cuti Pengganti" && (
+                        {!areActivityPhotosOptional && (
                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2 border-b border-slate-200">
                               {/* Foto 1 */}
                               <div>

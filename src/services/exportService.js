@@ -6,7 +6,7 @@ export class ExportService {
   /**
    * Export Submissions Summary to Excel (.xlsx)
    */
-  static exportSubmissionsToExcel(submissions = [], filename = "Laporan_E-Presensi_PLN.xlsx") {
+  static exportSubmissionsToExcel(submissions = [], filename = "Laporan_SemarPLNES.xlsx") {
     const formattedData = (submissions || []).map((sub, index) => {
       let nominal = 0;
       if (sub.type === "lembur") nominal = sub.estimasiBiayaRupiah;
@@ -36,60 +36,144 @@ export class ExportService {
   }
 
   /**
-   * Export Approved 3 Report Resume to Excel (.xlsx)
+   * Export Approved 3 Report Resume to Excel (.xlsx) matching ReportPdfDocument.jsx columns
    */
-  static exportReportToExcel(submissions = [], filterInfo = {}, signatories = [], filename = "Laporan_Resume_Approved3_PLN.xlsx") {
-    const formattedData = (submissions || []).map((sub, index) => {
+  static exportReportToExcel(submissions = [], filterInfo = {}, signatories = [], filename = null) {
+    const defaultFilename = filterInfo.type
+      ? `Laporan_Resume_${filterInfo.type.replace(/[\s/]+/g, "_")}_PLN.xlsx`
+      : "Laporan_Resume_Semar.xlsx";
+    const targetFilename = filename || defaultFilename;
+
+    const exportDateTimeStr = new Date().toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    }) + " WIB";
+
+    const reportHeaderTitle = filterInfo.reportTitle || "LAPORAN REKAPITULASI PERMOHONAN - SEMAR PLN ES";
+
+    const rows = [
+      [reportHeaderTitle],
+      [`Periode Laporan: ${filterInfo.periode || "Semua Periode"}`],
+      [`Unit Kerja / UPT: ${filterInfo.unit || "Semua Unit"}`],
+      [`Filter Jenis: ${filterInfo.type || "Semua Jenis"}`],
+      [`Waktu Export: ${exportDateTimeStr}`],
+      [], // Row Kosong
+      [
+        "No",
+        "No. Dokumen",
+        "Tgl Pengajuan",
+        "Nama Pegawai",
+        "NIP Pegawai",
+        "Jabatan",
+        "Jenis",
+        "Unit / Lokasi",
+        "Keterangan",
+        "Estimasi Biaya",
+        "Status"
+      ]
+    ];
+
+    (submissions || []).forEach((sub, index) => {
       let nominal = 0;
       if (sub.type === "lembur") nominal = sub.estimasiBiayaRupiah || 0;
       if (sub.type === "sppd") nominal = sub.totalEstimasiBiaya || 0;
 
-      let rincian = sub.keterangan || "-";
-      if (sub.type === "lembur") rincian = `${sub.kategoriLembur || ""} - ${sub.jenisPekerjaan || ""} (${sub.durasiJam || 0} Jam)`;
-      if (sub.type === "cuti") rincian = `${sub.cutiType || "Cuti"} (${sub.jumlahHari || 0} Hari)`;
-      if (sub.type === "sppd") rincian = `${sub.maksudSppd || ""} - Rute: ${sub.kotaTujuan || "-"}`;
+      let rincian = sub.keterangan || sub.maksudSppd || sub.alasan || "-";
+      if (sub.type === "lembur") {
+        const cat = sub.kategoriLembur ? `${sub.kategoriLembur} - ` : "";
+        const job = sub.jenisPekerjaan ? `${sub.jenisPekerjaan} ` : "";
+        const dur = `(${sub.durasiJam || 0} Jam)`;
+        const ket = sub.keterangan ? `: ${sub.keterangan}` : "";
+        rincian = `${cat}${job}${dur}${ket}`;
+      } else if (sub.type === "cuti") {
+        const cType = sub.cutiType || "Cuti";
+        const dur = `(${sub.jumlahHari || 0} Hari)`;
+        const ket = (sub.keterangan || sub.alasan) ? `: ${sub.keterangan || sub.alasan}` : "";
+        rincian = `${cType} ${dur}${ket}`;
+      } else if (sub.type === "ijin") {
+        const dur = `(${sub.jumlahHari || 1} Hari)`;
+        const ket = (sub.keterangan || sub.alasan) ? `: ${sub.keterangan || sub.alasan}` : "";
+        rincian = `Ijin ${dur}${ket}`;
+      } else if (sub.type === "sakit") {
+        const dur = `(${sub.jumlahHari || 1} Hari)`;
+        const ket = (sub.keterangan || sub.alasan) ? `: ${sub.keterangan || sub.alasan}` : "";
+        rincian = `Sakit ${dur}${ket}`;
+      } else if (sub.type === "sppd") {
+        const mksd = sub.maksudSppd || "SPPD";
+        const rute = sub.kotaTujuan ? ` (Rute: ${sub.kotaTujuan})` : "";
+        const ket = sub.keterangan ? `: ${sub.keterangan}` : "";
+        rincian = `${mksd}${rute}${ket}`;
+      }
 
-      return {
-        "No": index + 1,
-        "Nomor Dokumen": getFormattedDocNo(sub),
-        "Jenis Pengajuan": (sub.type || "").toUpperCase(),
-        "NIP Pemohon": sub.employeeNip,
-        "Nama Pemohon": sub.employeeName,
-        "Jabatan": sub.employeeJabatan,
-        "Unit Kerja": sub.unitUpt || "UPT Semarang",
-        "ULTG": sub.unitUltg || "-",
-        "Tanggal Pengajuan": formatDateIndonesian(sub.tanggalPengajuan),
-        "Ringkasan / Detail": rincian,
-        "Nominal / Estimasi Biaya (Rp)": nominal ? formatRupiah(nominal) : "-",
-        "Status Verifikasi": "APPROVED 3 (SELESAI SEPENUHNYA)"
-      };
+      const isNonBillableLembur =
+        sub.type === "lembur" &&
+        (sub.jenisPekerjaan === "Pengganti Piket (Operator sedang cuti)" ||
+          (typeof sub.jenisPekerjaan === "string" && (
+            sub.jenisPekerjaan.toLowerCase().includes("pengganti piket") ||
+            sub.jenisPekerjaan.toLowerCase().includes("operator sedang cuti")
+          )));
+
+      const displayType = isNonBillableLembur
+        ? "LEMBUR (TIDAK DITAGIHKAN)"
+        : (sub.type || sub.jenisPermohonan || "").toUpperCase();
+
+      rows.push([
+        index + 1,
+        getFormattedDocNo(sub),
+        sub.tanggalPengajuan ? formatDateIndonesian(sub.tanggalPengajuan) : "-",
+        sub.employeeName || sub.namaPegawai || "-",
+        sub.employeeNip || sub.nip || "-",
+        sub.employeeJabatan || "-",
+        displayType,
+        sub.unitKerja || sub.unitUltg || sub.unitUpt || sub.unit || "-",
+        rincian,
+        nominal ? formatRupiah(nominal) : "-",
+        getStatusLabel(sub.status) || "DISETUJUI"
+      ]);
     });
 
-    if (Array.isArray(signatories) && signatories.length === 3) {
-      formattedData.push({});
-      formattedData.push({ "No": "--- PEJABAT PENANDATANGAN LAPORAN (KIRI KE KANAN) ---" });
+    if (Array.isArray(signatories) && signatories.length > 0) {
+      rows.push([]);
+      rows.push(["--- LEMBAR PENGESAHAN LAPORAN (PEJABAT PENANDATANGAN) ---"]);
       signatories.forEach((sig, idx) => {
-        formattedData.push({
-          "No": `[Posisi ${idx + 1}] ${sig.title || "PENANDATANGAN"}`,
-          "Nomor Dokumen": sig.role || sig.jabatan || "-",
-          "Jenis Pengajuan": sig.name || "-",
-          "NIP Pemohon": sig.nip ? `NIP. ${sig.nip}` : "-",
-          "Nama Pemohon": sig.jabatan || "-"
-        });
+        const posText = sig.positionLabel || `Posisi ${idx + 1}`;
+        rows.push([
+          `[${posText}] ${sig.title || "PENANDATANGAN"}`,
+          sig.role || sig.jabatan || "-",
+          sig.name || "-",
+          sig.nip ? `NIP. ${sig.nip}` : "-",
+          sig.jabatan || "-"
+        ]);
       });
     }
 
-    const worksheet = XLSX.utils.json_to_sheet(formattedData);
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Resume Approved 3");
-    const cols = Object.keys(formattedData[0] || {}).map(() => ({ wch: 25 }));
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Resume Laporan");
+    const cols = [
+      { wch: 6 },  // No
+      { wch: 22 }, // No Dokumen
+      { wch: 18 }, // Tgl Pengajuan
+      { wch: 24 }, // Nama Pegawai
+      { wch: 20 }, // NIP Pegawai
+      { wch: 26 }, // Jabatan
+      { wch: 25 }, // Jenis
+      { wch: 22 }, // Unit/Lokasi
+      { wch: 38 }, // Keterangan
+      { wch: 20 }, // Estimasi Biaya
+      { wch: 22 }  // Status
+    ];
     worksheet["!cols"] = cols;
-    XLSX.writeFile(workbook, filename);
+    XLSX.writeFile(workbook, targetFilename);
   }
   /**
    * Export Attendance Summary to Excel
    */
-  static exportAttendanceToExcel(records = [], filename = "Rekap_Presensi_Harian_PLN.xlsx") {
+  static exportAttendanceToExcel(records = [], filename = "Rekap_Semar_PLNES.xlsx") {
     const data = (records || []).map((rec, i) => ({
       "No": i + 1,
       "NIP": rec.employeeNip,
@@ -103,7 +187,7 @@ export class ExportService {
     }));
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Presensi Harian");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Semar Harian");
     XLSX.writeFile(workbook, filename);
   }
   /**
@@ -115,7 +199,7 @@ export class ExportService {
   /**
    * Export Presentation Summary (PPT Slide Overview Layout)
    */
-  static exportSummaryPresentationPPT(submissions, stats, title = "Laporan Performance Bulanan PLN E-PRESENSI") {
+  static exportSummaryPresentationPPT(submissions, stats, title = "LAPORAN REKAPITULASI PERMOHONAN - SEMAR PLN ES") {
     const doc = new jsPDF("landscape");
     doc.setFillColor(0, 163, 224);
     doc.rect(0, 0, 297, 210, "F");

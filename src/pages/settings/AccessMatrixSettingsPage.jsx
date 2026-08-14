@@ -168,12 +168,12 @@ export default function AccessMatrixSettingsPage() {
   };
 
   const [matrix, setMatrix] = useState(() => {
-    const saved = localStorage.getItem("pln_access_matrix_v2");
+    const saved = globalThis.appStorage.getItem("pln_access_matrix_v2");
     return saved ? JSON.parse(saved) : initialMatrix;
   });
 
   const [workflowConfig, setWorkflowConfig] = useState(() => {
-    const saved = localStorage.getItem("pln_workflow_config_v2");
+    const saved = globalThis.appStorage.getItem("pln_workflow_config_v2");
     return saved ? JSON.parse(saved) : initialWorkflowConfig;
   });
 
@@ -182,8 +182,8 @@ export default function AccessMatrixSettingsPage() {
 
   // Check if state is different from saved state
   useEffect(() => {
-    const savedMatrix = localStorage.getItem("pln_access_matrix_v2");
-    const savedConfig = localStorage.getItem("pln_workflow_config_v2");
+    const savedMatrix = globalThis.appStorage.getItem("pln_access_matrix_v2");
+    const savedConfig = globalThis.appStorage.getItem("pln_workflow_config_v2");
     
     const currentSavedMatrix = savedMatrix ? JSON.parse(savedMatrix) : initialMatrix;
     const currentSavedConfig = savedConfig ? JSON.parse(savedConfig) : initialWorkflowConfig;
@@ -226,8 +226,8 @@ export default function AccessMatrixSettingsPage() {
 
   const handleSaveAll = () => {
     try {
-      localStorage.setItem("pln_access_matrix_v2", JSON.stringify(matrix));
-      localStorage.setItem("pln_workflow_config_v2", JSON.stringify(workflowConfig));
+      globalThis.appStorage.setItem("pln_access_matrix_v2", JSON.stringify(matrix));
+      globalThis.appStorage.setItem("pln_workflow_config_v2", JSON.stringify(workflowConfig));
       setHasChanges(false);
       setSuccessMsg("Pengaturan matriks hak akses & workflow berhasil diperbarui secara permanen!");
       setTimeout(() => setSuccessMsg(""), 5000);
@@ -241,8 +241,8 @@ export default function AccessMatrixSettingsPage() {
     if (window.confirm("Apakah Anda yakin ingin mengembalikan semua hak akses & alur workflow ke pengaturan default pabrik PLN?")) {
       setMatrix(initialMatrix);
       setWorkflowConfig(initialWorkflowConfig);
-      localStorage.setItem("pln_access_matrix_v2", JSON.stringify(initialMatrix));
-      localStorage.setItem("pln_workflow_config_v2", JSON.stringify(initialWorkflowConfig));
+      globalThis.appStorage.setItem("pln_access_matrix_v2", JSON.stringify(initialMatrix));
+      globalThis.appStorage.setItem("pln_workflow_config_v2", JSON.stringify(initialWorkflowConfig));
       setHasChanges(false);
       setSuccessMsg("Konfigurasi hak akses berhasil direset ke standar operasional PLN JATENG DIY.");
       setTimeout(() => setSuccessMsg(""), 5000);
@@ -734,8 +734,8 @@ export default function AccessMatrixSettingsPage() {
             <div className="flex items-center gap-2.5 w-full sm:w-auto">
               <button
                 onClick={() => {
-                  const savedMatrix = localStorage.getItem("pln_access_matrix_v2");
-                  const savedConfig = localStorage.getItem("pln_workflow_config_v2");
+                  const savedMatrix = globalThis.appStorage.getItem("pln_access_matrix_v2");
+                  const savedConfig = globalThis.appStorage.getItem("pln_workflow_config_v2");
                   setMatrix(savedMatrix ? JSON.parse(savedMatrix) : initialMatrix);
                   setWorkflowConfig(savedConfig ? JSON.parse(savedConfig) : initialWorkflowConfig);
                   setHasChanges(false);

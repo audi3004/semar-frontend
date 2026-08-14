@@ -1,6 +1,6 @@
 import { INITIAL_USERS } from "../master/initialData";
 import { formatDateDDMMYYYY } from "../utils/formatters";
-import { api, AUTH_STORAGE_KEYS, clearAuthStorage, getAccessToken, getRefreshToken, persistAuthSession } from "./api";
+import { api, clearAuthStorage, getAccessToken, getSessionUser, persistAuthSession } from "./api";
 const CURRENT_USER_KEY = "epresensi_current_user_nip";
 const USERS_LIST_KEY = "epresensi_users_list";
 export class AuthService {
@@ -27,13 +27,12 @@ export class AuthService {
   }
 
   static resetLocalState() {
-    localStorage.clear();
-    sessionStorage.clear();
+    globalThis.appStorage.clear();
     console.log("Local state & session storage cleared for fresh install test.");
   }
 
   static getUsers() {
-    const stored = localStorage.getItem(USERS_LIST_KEY);
+    const stored = globalThis.appStorage.getItem(USERS_LIST_KEY);
     let usersList = INITIAL_USERS;
     if (stored) {
       try {
@@ -64,25 +63,16 @@ export class AuthService {
       ...u,
       password: this.encrypt(u.password)
     }));
-    localStorage.setItem(USERS_LIST_KEY, JSON.stringify(encryptedUsers));
+    globalThis.appStorage.setItem(USERS_LIST_KEY, JSON.stringify(encryptedUsers));
   }
 
   static getCurrentUser() {
-    const storedUser = localStorage.getItem(AUTH_STORAGE_KEYS.currentUser);
-    const accessToken = getAccessToken();
-    const refreshToken = getRefreshToken();
-    if (!storedUser || (!accessToken && !refreshToken)) return null;
-
-    try {
-      return this.normalizeUser(JSON.parse(storedUser));
-    } catch {
-      clearAuthStorage();
-      return null;
-    }
+    const user = getSessionUser();
+    return user ? this.normalizeUser(user) : null;
   }
 
   static isSessionExpired() {
-    return !getRefreshToken();
+    return !getAccessToken();
   }
 
   static extendSession() {
@@ -90,7 +80,7 @@ export class AuthService {
   }
 
   static simulateSessionExpiry() {
-    localStorage.setItem("epresensi_session_expiry", (Date.now() - 5000).toString());
+    globalThis.appStorage.setItem("epresensi_session_expiry", (Date.now() - 5000).toString());
   }
 
   static failedAttempts = {};
@@ -126,7 +116,7 @@ export class AuthService {
     try {
       const response = await api.login(identifier.trim(), passwordInput);
       const authData = response?.data;
-      if (!response?.success || !authData?.access_token || !authData?.refresh_token || !authData?.user) {
+      if (!response?.success || !authData?.access_token || !authData?.user) {
         throw new Error(response?.message || "Respons login backend tidak lengkap.");
       }
 
@@ -162,9 +152,9 @@ export class AuthService {
     const users = this.getUsers();
     const found = users.find((u) => u.role === role);
     if (found) {
-      localStorage.removeItem("epresensi_explicit_logout");
-      localStorage.setItem(CURRENT_USER_KEY, found.nip);
-      localStorage.setItem("epresensi_session_expiry", (Date.now() + 1000 * 60 * 60).toString());
+      globalThis.appStorage.removeItem("epresensi_explicit_logout");
+      globalThis.appStorage.setItem(CURRENT_USER_KEY, found.nip);
+      globalThis.appStorage.setItem("epresensi_session_expiry", (Date.now() + 1000 * 60 * 60).toString());
       return found;
     }
     return this.getCurrentUser();
@@ -184,7 +174,7 @@ export class AuthService {
       const authData = await api.restoreSession();
       if (!authData?.user) return null;
       const user = this.normalizeUser(authData.user);
-      localStorage.setItem(AUTH_STORAGE_KEYS.currentUser, JSON.stringify(user));
+      persistAuthSession({ ...authData, user });
       return user;
     } catch {
       clearAuthStorage();

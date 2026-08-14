@@ -133,9 +133,9 @@ export class DataService {
 
   // --- SUBMISSIONS CRUD ---
   static getSubmissions() {
-    const stored = localStorage.getItem(SUBMISSIONS_KEY);
+    const stored = globalThis.appStorage.getItem(SUBMISSIONS_KEY);
     if (!stored) {
-      localStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(INITIAL_SUBMISSIONS));
+      globalThis.appStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(INITIAL_SUBMISSIONS));
       return INITIAL_SUBMISSIONS;
     }
     try {
@@ -144,7 +144,7 @@ export class DataService {
       const isLegacyMockId = (id) => ["sub-1", "sub-2", "sub-3", "sub-4", "sub-5"].includes(String(id));
       if (Array.isArray(parsed) && parsed.some((s) => isLegacyMockId(s?.id))) {
         const cleaned = parsed.filter((s) => !isLegacyMockId(s?.id));
-        localStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(cleaned));
+        globalThis.appStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(cleaned));
         return cleaned;
       }
       return parsed;
@@ -154,17 +154,17 @@ export class DataService {
   }
   static saveSubmissions(submissions) {
     try {
-      localStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(submissions));
+      globalThis.appStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(submissions));
     } catch (err) {
       console.warn("Storage quota exceeded when saving submissions, auto-pruning non-essential cache...", err);
       this.pruneOldNotifications();
       try {
-        localStorage.removeItem("epresensi_report_signatories");
+        globalThis.appStorage.removeItem("epresensi_report_signatories");
       } catch (e) { }
 
       // Try saving again
       try {
-        localStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(submissions));
+        globalThis.appStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(submissions));
       } catch (retryErr) {
         // Strip heavy base64 data URLs on older historical submissions to free space
         try {
@@ -179,7 +179,7 @@ export class DataService {
             }
             return sub;
           });
-          localStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(trimmed));
+          globalThis.appStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(trimmed));
         } catch (finalErr) {
           console.error("Local storage quota completely full:", finalErr);
           toast.error("Penyimpanan lokal browser penuh. Mohon kurangi ukuran file lampiran.");
@@ -190,12 +190,12 @@ export class DataService {
 
   static pruneOldNotifications() {
     try {
-      const stored = localStorage.getItem(NOTIFICATIONS_KEY);
+      const stored = globalThis.appStorage.getItem(NOTIFICATIONS_KEY);
       if (stored) {
         const notifs = JSON.parse(stored);
         if (Array.isArray(notifs) && notifs.length > 5) {
           const pruned = notifs.slice(0, 5);
-          localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(pruned));
+          globalThis.appStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(pruned));
         }
       }
     } catch (e) {
@@ -865,9 +865,9 @@ export class DataService {
   }
   // --- SETTINGS CRUD ---
   static getSettings() {
-    const stored = localStorage.getItem(SETTINGS_KEY);
+    const stored = globalThis.appStorage.getItem(SETTINGS_KEY);
     if (!stored) {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(INITIAL_SETTINGS));
+      globalThis.appStorage.setItem(SETTINGS_KEY, JSON.stringify(INITIAL_SETTINGS));
       return INITIAL_SETTINGS;
     }
     try {
@@ -877,14 +877,14 @@ export class DataService {
     }
   }
   static saveSettings(settings) {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    globalThis.appStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }
   // --- NOTIFICATIONS ---
   static getNotifications(userNip) {
-    const stored = localStorage.getItem(NOTIFICATIONS_KEY);
+    const stored = globalThis.appStorage.getItem(NOTIFICATIONS_KEY);
     let notifs = [];
     if (!stored) {
-      localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(INITIAL_NOTIFICATIONS));
+      globalThis.appStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(INITIAL_NOTIFICATIONS));
       notifs = INITIAL_NOTIFICATIONS;
     } else {
       try {
@@ -901,25 +901,25 @@ export class DataService {
   static pushNotification(notif) {
     const notifs = this.getNotifications();
     notifs.unshift(notif);
-    localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifs));
+    globalThis.appStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifs));
   }
   static markNotificationAsRead(id) {
     const notifs = this.getNotifications();
     const target = notifs.find((n) => n.id === id);
     if (target) {
       target.isRead = true;
-      localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifs));
+      globalThis.appStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifs));
     }
   }
   static markAllNotificationsRead() {
     const notifs = this.getNotifications().map((n) => ({ ...n, isRead: true }));
-    localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifs));
+    globalThis.appStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifs));
   }
   // --- ATTENDANCE ---
   static getAttendance() {
-    const stored = localStorage.getItem(ATTENDANCE_KEY);
+    const stored = globalThis.appStorage.getItem(ATTENDANCE_KEY);
     if (!stored) {
-      localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(INITIAL_ATTENDANCE));
+      globalThis.appStorage.setItem(ATTENDANCE_KEY, JSON.stringify(INITIAL_ATTENDANCE));
       return INITIAL_ATTENDANCE;
     }
     try {
@@ -931,7 +931,7 @@ export class DataService {
   static recordCheckin(record) {
     const list = this.getAttendance();
     list.unshift(record);
-    localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(list));
+    globalThis.appStorage.setItem(ATTENDANCE_KEY, JSON.stringify(list));
     return record;
   }
 }
