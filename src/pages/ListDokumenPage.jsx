@@ -239,7 +239,7 @@ export const ListDokumenPage = ({
   const getDocProjectName = (doc, validUsers) => {
     if (doc.projectName) return doc.projectName;
     if (doc.nama_project) return doc.nama_project;
-    if (doc.petugas?.jabatan?.project?.nama_project) return doc.petugas.jabatan.project.nama_project;
+    if (doc.petugas?.project?.nama_project) return doc.petugas.project.nama_project;
     const employee = (validUsers || []).find((u) => u.nip === doc.employeeNip);
     if (employee) {
       if (employee.multiProject && Array.isArray(employee.multiProject) && employee.multiProject.length > 0) {

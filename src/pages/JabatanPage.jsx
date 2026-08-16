@@ -8,9 +8,7 @@ import { SortableTableHeader, sortTableRows, toggleTableSort } from "../componen
 
 export const JabatanPage = ({ currentUser, onRefreshData }) => {
   const [jabatans, setJabatans] = useState([]);
-  const [projects, setProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [projectFilter, setProjectFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("nama_jabatan"); const [sortOrder, setSortOrder] = useState("asc");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -18,22 +16,15 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
   const [formError, setFormError] = useState("");
 
   const [namaJabatan, setNamaJabatan] = useState("");
-  const [idProject, setIdProject] = useState(1);
   const [activeStatus, setActiveStatus] = useState("Y");
 
   const loadData = async () => {
     try {
-      const [jabatanResponse, projectResponse] = await Promise.all([
-        api.client.get("/jabatan", { params: { limit: 1000 } }),
-        api.client.get("/projects", { params: { limit: 1000 } })
-      ]);
+      const jabatanResponse = await api.client.get("/jabatan", { params: { limit: 1000 } });
       const jabatanRows = jabatanResponse.data?.data || [];
-      const projectRows = projectResponse.data?.data || [];
       setJabatans(jabatanRows);
-      setProjects(projectRows);
-      if (projectRows.length > 0) setIdProject(projectRows[0].id_project);
     } catch (error) {
-      setJabatans([]); setProjects([]);
+      setJabatans([]);
       toast.error(error.response?.data?.message || "Gagal memuat Master Jabatan.");
     }
   };
@@ -42,27 +33,19 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
     loadData();
   }, []);
 
-  const getProjectName = (projId) => {
-    const found = projects.find((p) => Number(p.id_project) === Number(projId));
-    return found ? found.nama_project : `Project #${projId}`;
-  };
-
   const filteredJabatans = sortTableRows(jabatans.filter((j) => {
-    if (projectFilter !== "all" && String(j.id_project) !== projectFilter) return false;
     if (statusFilter !== "all" && (j.is_active || j.active || "Y") !== statusFilter) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     const matchJab = j.nama_jabatan?.toLowerCase().includes(q);
-    const matchProj = getProjectName(j.id_project)?.toLowerCase().includes(q);
-    return matchJab || matchProj;
-  }), sortBy, sortOrder, { id_jabatan: (j) => Number(j.id_jabatan), project: (j) => getProjectName(j.id_project), is_active: (j) => j.is_active || j.active || "Y" });
-  const pagination = useDataPagination(filteredJabatans, [searchQuery, projectFilter, statusFilter, sortBy, sortOrder]);
+    return matchJab;
+  }), sortBy, sortOrder, { id_jabatan: (j) => Number(j.id_jabatan), is_active: (j) => j.is_active || j.active || "Y" });
+  const pagination = useDataPagination(filteredJabatans, [searchQuery, statusFilter, sortBy, sortOrder]);
   const handleSort = (field) => toggleTableSort(field, sortBy, sortOrder, setSortBy, setSortOrder);
 
   const handleOpenAdd = () => {
     setEditingItem(null);
     setNamaJabatan("");
-    if (projects.length > 0) setIdProject(projects[0].id_project);
     setActiveStatus("Y");
     setFormError("");
     setIsModalOpen(true);
@@ -71,7 +54,6 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
   const handleOpenEdit = (item) => {
     setEditingItem(item);
     setNamaJabatan(item.nama_jabatan || "");
-    setIdProject(item.id_project || 1);
     setActiveStatus(item.is_active || "Y");
     setFormError("");
     setIsModalOpen(true);
@@ -83,14 +65,8 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
       setFormError("Nama Jabatan minimal 3 karakter.");
       return;
     }
-    if (!idProject) {
-      setFormError("Proyek Kerja wajib dipilih.");
-      return;
-    }
-
     const payload = {
       nama_jabatan: namaJabatan.trim(),
-      id_project: Number(idProject),
       is_active: activeStatus
     };
 
@@ -128,7 +104,7 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
             <Award className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" /> Master Jabatan Pegawai
           </h1>
           <p className="text-xs text-slate-600 font-medium">
-            Kelola daftar posisi, jabatan teknis, dan pemetaan ke proyek kerja PLN Electricity Services
+            Kelola daftar posisi dan jabatan Pegawai maupun Petugas.
           </p>
         </div>
         <button
@@ -145,13 +121,13 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
           <input
             type="text"
-            placeholder="Cari posisi / jabatan / project..."
+            placeholder="Cari posisi atau jabatan..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
-        <div className="flex flex-wrap items-center gap-2"><select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Project</option>{projects.map((project) => <option key={project.id_project} value={project.id_project}>{project.nama_project}</option>)}</select><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select><span className="text-xs text-slate-500 font-bold">Total Jabatan: {filteredJabatans.length} Posisi</span></div>
+        <div className="flex flex-wrap items-center gap-2"><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select><span className="text-xs text-slate-500 font-bold">Total Jabatan: {filteredJabatans.length} Posisi</span></div>
       </div>
 
       {/* Table */}
@@ -162,7 +138,6 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black uppercase text-slate-500 tracking-wider">
                 <SortableTableHeader field="id_jabatan" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5 pl-5">ID Jabatan</SortableTableHeader>
                 <SortableTableHeader field="nama_jabatan" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5">Nama Jabatan / Posisi</SortableTableHeader>
-                <SortableTableHeader field="project" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5">Proyek Kerja (FK Project)</SortableTableHeader>
                 <SortableTableHeader field="is_active" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="p-3.5">Status</SortableTableHeader>
                 <th className="p-3.5 pr-5 text-center">Aksi</th>
               </tr>
@@ -170,7 +145,7 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {filteredJabatans.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="p-8 text-center text-slate-400 font-medium">
+                  <td colSpan="4" className="p-8 text-center text-slate-400 font-medium">
                     Tidak ada data Jabatan yang ditemukan.
                   </td>
                 </tr>
@@ -179,11 +154,6 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
                   <tr key={item.id_jabatan ? `jab-${item.id_jabatan}-${idx}` : `jab-${idx}`} className="hover:bg-slate-50/80 transition">
                     <td className="p-3.5 pl-5 font-mono text-slate-500 font-bold">#{item.id_jabatan}</td>
                     <td className="p-3.5 font-bold text-slate-900">{item.nama_jabatan}</td>
-                    <td className="p-3.5">
-                      <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 font-bold rounded-lg border border-indigo-200 text-[11px]">
-                        {getProjectName(item.id_project)}
-                      </span>
-                    </td>
                     <td className="p-3.5">
                       <span
                         className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border ${
@@ -263,22 +233,6 @@ export const JabatanPage = ({ currentUser, onRefreshData }) => {
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     placeholder="misal: Teknisi Pemeliharaan GI"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-slate-600 font-bold mb-1">Proyek Kerja (Master Project) *</label>
-                  <select
-                    value={idProject}
-                    onChange={(e) => setIdProject(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    {projects.map((p) => (
-                      <option key={p.id_project} value={p.id_project}>
-                        {p.nama_project} (ID #{p.id_project})
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div>

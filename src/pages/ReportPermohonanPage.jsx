@@ -351,6 +351,9 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
     let totalCutiDays = 0;
     let totalIjinDays = 0;
     let totalSakitDays = 0;
+    let totalCutiTransactions = 0;
+    let totalIjinTransactions = 0;
+    let totalSakitTransactions = 0;
 
     filteredSubmissions.forEach((s) => {
       if (s.type === "lembur") {
@@ -360,10 +363,13 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
         totalSppdCost += Number(s.totalEstimasiBiaya || 0);
       } else if (s.type === "cuti") {
         totalCutiDays += Number(s.jumlahHari || 0);
+        totalCutiTransactions += 1;
       } else if (s.type === "ijin") {
         totalIjinDays += Number(s.jumlahHari || 1);
+        totalIjinTransactions += 1;
       } else if (s.type === "sakit") {
         totalSakitDays += Number(s.jumlahHari || 1);
+        totalSakitTransactions += 1;
       }
     });
 
@@ -375,6 +381,9 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
       totalCutiDays,
       totalIjinDays,
       totalSakitDays,
+      totalCutiTransactions,
+      totalIjinTransactions,
+      totalSakitTransactions,
       totalIjinSakitDays: totalIjinDays + totalSakitDays
     };
   }, [filteredSubmissions]);
@@ -666,7 +675,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Estimasi SPPD</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Biaya SPPD</p>
           <div className="flex items-baseline gap-1 mt-1">
             <span className="text-lg font-black text-sky-600 font-mono">{formatRupiah(metrics.totalSppdCost)}</span>
           </div>
@@ -675,14 +684,20 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Cuti / Ijin / Sakit</p>
-          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 mt-1">
-            <span className="text-sm font-black text-emerald-600">{metrics.totalCutiDays} Cuti</span>
-            <span className="text-[10px] font-bold text-slate-300">/</span>
-            <span className="text-sm font-black text-amber-600">{metrics.totalIjinDays} Ijin</span>
-            <span className="text-[10px] font-bold text-slate-300">/</span>
-            <span className="text-sm font-black text-rose-500">{metrics.totalSakitDays} Sakit</span>
+          <div className="mt-1.5 space-y-1 text-[11px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-black text-emerald-600">Cuti: {metrics.totalCutiDays} Hari</span>
+              <span className="font-bold text-slate-500">{metrics.totalCutiTransactions} Transaksi</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-black text-amber-600">Ijin: {metrics.totalIjinDays} Hari</span>
+              <span className="font-bold text-slate-500">{metrics.totalIjinTransactions} Transaksi</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-black text-rose-500">Sakit: {metrics.totalSakitDays} Hari</span>
+              <span className="font-bold text-slate-500">{metrics.totalSakitTransactions} Transaksi</span>
+            </div>
           </div>
-          <p className="text-[10px] text-slate-400 font-medium mt-1">Rekapitulasi Cuti, Ijin & Sakit Pegawai</p>
         </div>
       </div>
 

@@ -56,6 +56,7 @@ export const Sidebar = ({
 
   const allOperasionalItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "perintah-kerja-lembur", label: "Surat Perintah Kerja Lembur", icon: FileText },
     { id: "lembur", label: "Lembur", icon: Clock },
     { id: "cuti", label: "Cuti", icon: Palmtree },
     { id: "ijin", label: "Ijin", icon: FileCheck2 },

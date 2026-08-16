@@ -133,7 +133,11 @@ const isPhotoEvidenceOptional = (category = "", jobType = "") => {
       "cuti pengganti",
       "cuti penganti",
       "pengganti piket",
+      "pengganti ijin",
+      "pengganti izin",
+      "pengganti sakit",
       "libur nasional",
+      "siaga hari libur",
       "tanggal merah",
    ].some((keyword) => value.includes(keyword));
 };
@@ -169,6 +173,8 @@ const mapApiLembur = (item) => {
       ...category,
       areaGroup: item.area_group || "",
       isHariLibur: item.is_hari_libur === "Y",
+      dasarLemburType: item.dasar_lembur_type,
+      dasarReferenceId: item.id_spkl_petugas || item.id_cuti || item.id_ijin || item.id_sakit,
       kegiatanDetail: item.detail_pekerjaan_lembur || "",
       petugasPendampingNip: item.petugasCuti?.nip || "",
       petugasPendampingNama: item.petugasCuti?.nama || "",
@@ -255,6 +261,8 @@ export const LemburPage = ({
    const [detailSub, setDetailSub] = useState(null);
    const [searchParams, setSearchParams] = useSearchParams();
    const [filterStatus, setFilterStatus] = useState("all");
+   const [availableBases, setAvailableBases] = useState([]);
+   const [selectedBasisKey, setSelectedBasisKey] = useState("");
    const [tanggalLembur, setTanggalLembur] = useState("");
    const [jamMulai, setJamMulai] = useState("");
    const [jamSelesai, setJamSelesai] = useState("");
@@ -328,8 +336,14 @@ export const LemburPage = ({
       }
    };
 
+   const loadAvailableBases = async () => {
+      try { setAvailableBases(await api.getDasarLembur()); }
+      catch (error) { setAvailableBases([]); setAlertModal({ isOpen: true, type: "error", title: "Gagal Memuat Dasar Lembur", message: error.response?.data?.message || "Dasar lembur tidak dapat dimuat." }); }
+   };
+
    useEffect(() => {
       loadLemburFromApi();
+      loadAvailableBases();
    }, [currentUser?.id_petugas, currentUser?.petugas?.id_petugas]);
 
    useEffect(() => {
@@ -384,13 +398,17 @@ export const LemburPage = ({
       }));
 
    // Derived conditional flags based on Jenis Pekerjaan
-   const isOperatorCuti =
-      jenisPekerjaan === "Pengganti Piket (Operator sedang cuti)";
-   const isSiagaLibur = jenisPekerjaan === "Siaga / Libur Nasional";
-   const areActivityPhotosOptional = isPhotoEvidenceOptional(
-      kategoriLembur,
-      jenisPekerjaan,
-   );
+   const selectedBasis = availableBases.find((item) => `${item.type}:${item.reference_id}` === selectedBasisKey) || null;
+   const isOperatorCuti = ["CUTI", "IJIN", "SAKIT"].includes(selectedBasis?.type) || jenisPekerjaan === "Pengganti Piket (Operator sedang cuti)";
+   const isSiagaLibur = selectedBasis?.kode_jenis_pekerjaan === "SIAGA_HARI_LIBUR" || jenisPekerjaan === "Siaga / Libur Nasional";
+   const areActivityPhotosOptional = ["CUTI", "IJIN", "SAKIT"].includes(selectedBasis?.type) || selectedBasis?.kode_jenis_pekerjaan === "SIAGA_HARI_LIBUR" || isPhotoEvidenceOptional(kategoriLembur, jenisPekerjaan);
+   const hourOptions = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
+   const handleBasisChange = (key) => {
+      setSelectedBasisKey(key); const basis = availableBases.find((item) => `${item.type}:${item.reference_id}` === key);
+      if (!basis) return;
+      setTanggalLembur(basis.tanggal || basis.tanggal_mulai || ""); setKategoriLembur(basis.kategori_lembur || ""); setJenisPekerjaan(basis.jenis_pekerjaan || ""); setAreaGroup(basis.area_group || ""); setKegiatanDetail(basis.detail_pekerjaan || "");
+      setPetugasPendampingNip(basis.petugas?.nip || ""); setIsHariLibur(basis.kode_jenis_pekerjaan === "SIAGA_HARI_LIBUR");
+   };
    const isFixedEightHourMaker =
       currentUser?.role === "maker" && (isOperatorCuti || isSiagaLibur);
 
@@ -522,6 +540,7 @@ export const LemburPage = ({
 
    const handleOpenEditModal = (sub) => {
       setEditingSub(sub);
+      setSelectedBasisKey(sub.dasarLemburType && sub.dasarReferenceId ? `${sub.dasarLemburType}:${sub.dasarReferenceId}` : "");
       setTanggalLembur(sub.tanggalLembur || "");
       setJamMulai(sub.jamMulai || "");
       setJamSelesai(sub.jamSelesai || "");
@@ -544,6 +563,8 @@ export const LemburPage = ({
    };
    const handleOpenCreateModal = () => {
       setEditingSub(null);
+      setSelectedBasisKey("");
+      loadAvailableBases();
       setTanggalLembur("");
       setJamMulai("");
       setJamSelesai("");
@@ -680,6 +701,11 @@ export const LemburPage = ({
       );
       const formData = new FormData();
       formData.append("id_petugas", String(idPetugas || ""));
+      if (selectedBasis) {
+         formData.append("dasar_lembur_type", selectedBasis.type);
+         const fields = { SPKL: "id_spkl_petugas", CUTI: "id_cuti", IJIN: "id_ijin", SAKIT: "id_sakit" };
+         formData.append(fields[selectedBasis.type], String(selectedBasis.reference_id));
+      }
       if (showPetugasPendamping && partner?.id_petugas)
          formData.append("id_petugas_cuti", String(partner.id_petugas));
       formData.append("tgl_lembur", tanggalLembur);
@@ -718,14 +744,11 @@ export const LemburPage = ({
       const isCreate = !editingSub?.id_lembur;
       if (
          isCreate &&
-         (!suratPerintahFile ||
-            (!areActivityPhotosOptional &&
-               (!fotoKegiatan1File || !fotoKegiatan2File)))
+         (!selectedBasis || (!areActivityPhotosOptional &&
+            (!suratPerintahFile || !fotoKegiatan1File || !fotoKegiatan2File)))
       ) {
          throw new Error(
-            areActivityPhotosOptional
-               ? "Backend mewajibkan Surat Perintah Lembur saat membuat data."
-               : "Backend mewajibkan Foto Kegiatan 1, Foto Kegiatan 2, dan Surat Perintah Lembur saat membuat data.",
+            !selectedBasis ? "Dasar Perintah Lembur wajib dipilih." : "Foto Kegiatan 1, Foto Kegiatan 2, dan Surat Perintah Lembur wajib untuk pekerjaan reguler.",
          );
       }
       const response = isCreate
@@ -860,13 +883,12 @@ export const LemburPage = ({
       setPetugasPendampingError("");
 
       if (
-         !tanggalLembur ||
+         (!selectedBasis && !editingSub) || !tanggalLembur ||
          !areaGroup ||
          !jamMulai ||
          !jamSelesai ||
          !kategoriLembur ||
          !jenisPekerjaan ||
-         !dasarPerintahLemburUrl ||
          !kegiatanDetail
       ) {
          setAlertModal({
@@ -874,7 +896,7 @@ export const LemburPage = ({
             type: "error",
             title: "Gagal Kirim Pengajuan Lembur",
             message:
-               "Semua kolom formulir (Tanggal Lembur, Group Area, Jam Mulai, Jam Selesai, Kategori Pekerjaan, Jenis Pekerjaan, Upload File Dasar Perintah Lembur, dan Detail Rincian Pekerjaan) harus terisi dan lengkap sebelum dikirim.",
+               "Dasar Perintah Lembur, jam, kategori, jenis pekerjaan, area, dan detail pekerjaan harus lengkap.",
          });
          return;
       }
@@ -2244,6 +2266,15 @@ export const LemburPage = ({
                      onSubmit={handleCreateLembur}
                      className="space-y-3.5 text-xs"
                   >
+                     <div>
+                        <label className="block font-bold mb-1 text-slate-800">Dasar Perintah Lembur</label>
+                        <select value={selectedBasisKey} onChange={(e) => handleBasisChange(e.target.value)} required disabled={Boolean(editingSub)} className="w-full h-11 px-3 bg-indigo-50 border border-indigo-200 rounded-xl text-slate-900 font-bold disabled:opacity-70">
+                           <option value="">-- Pilih SPKL atau Pengganti Cuti/Ijin/Sakit --</option>
+                           <optgroup label="Perintah Kerja Lembur (SPKL)">{availableBases.filter((b)=>b.type === "SPKL").map((b)=><option key={`SPKL:${b.reference_id}`} value={`SPKL:${b.reference_id}`}>{b.nomor_dokumen} — {b.jenis_pekerjaan} — {formatDateIndonesian(b.tanggal)}</option>)}</optgroup>
+                           <optgroup label="Pengganti Ketidakhadiran">{availableBases.filter((b)=>b.type !== "SPKL").map((b)=><option key={`${b.type}:${b.reference_id}`} value={`${b.type}:${b.reference_id}`}>{b.type} — {b.petugas?.nama} — {formatDateIndonesian(b.tanggal_mulai)}</option>)}</optgroup>
+                        </select>
+                        {!availableBases.length && !editingSub && <p className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">Belum ada SPKL atau transaksi Cuti/Ijin/Sakit yang dapat digunakan. Pengajuan lembur tidak dapat dibuat.</p>}
+                     </div>
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                            <label className="block font-bold mb-1 text-slate-800">
@@ -2256,6 +2287,7 @@ export const LemburPage = ({
                                  handleTanggalLemburChange(e.target.value)
                               }
                               required
+                              readOnly={selectedBasis?.type === "SPKL"}
                               className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none"
                            />
                         </div>
@@ -2268,6 +2300,7 @@ export const LemburPage = ({
                               value={areaGroup}
                               onChange={(e) => setAreaGroup(e.target.value)}
                               required
+                              disabled={selectedBasis?.type === "SPKL"}
                               className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none cursor-pointer"
                            >
                               <option value="">-- Pilih Group Area --</option>
@@ -2286,30 +2319,26 @@ export const LemburPage = ({
                            <label className="block font-bold mb-1 text-slate-800">
                               Jam Mulai
                            </label>
-                           <input
-                              type="time"
+                           <select
                               value={jamMulai}
                               onChange={(e) => setJamMulai(e.target.value)}
-                              readOnly={isFixedEightHourMaker}
                               disabled={isFixedEightHourMaker}
                               required
                               className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none disabled:bg-slate-200 disabled:text-slate-700 disabled:cursor-not-allowed"
-                           />
+                           ><option value="">Pilih jam</option>{hourOptions.map((hour)=><option key={hour} value={hour}>{hour}</option>)}</select>
                         </div>
 
                         <div>
                            <label className="block font-bold mb-1 text-slate-800">
                               Jam Selesai
                            </label>
-                           <input
-                              type="time"
+                           <select
                               value={jamSelesai}
                               onChange={(e) => setJamSelesai(e.target.value)}
-                              readOnly={isFixedEightHourMaker}
                               disabled={isFixedEightHourMaker}
                               required
                               className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none disabled:bg-slate-200 disabled:text-slate-700 disabled:cursor-not-allowed"
-                           />
+                           ><option value="">Pilih jam</option>{hourOptions.map((hour)=><option key={hour} value={hour}>{hour}</option>)}</select>
                         </div>
                      </div>
 
@@ -2324,56 +2353,29 @@ export const LemburPage = ({
                            <label className="block font-bold mb-1 text-slate-800">
                               Kategori Pekerjaan Lembur
                            </label>
-                           <select
+                           <input
                               value={kategoriLembur}
-                              onChange={(e) =>
-                                 handleKategoriChange(e.target.value)
-                              }
+                              readOnly
                               required
-                              className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none cursor-pointer"
-                           >
-                              <option value="">
-                                 -- Pilih Kategori Pekerjaan --
-                              </option>
-                              {Object.keys(mapping).map((cat) => (
-                                 <option key={cat} value={cat}>
-                                    {cat}
-                                 </option>
-                              ))}
-                           </select>
+                              className="w-full h-11 px-3 bg-slate-100 border border-slate-300 rounded-xl text-slate-900"
+                           />
                         </div>
 
                         <div>
                            <label className="block font-bold mb-1 text-slate-800">
                               Jenis Pekerjaan
                            </label>
-                           <select
+                           <input
                               value={jenisPekerjaan}
-                              onChange={(e) =>
-                                 handleJenisPekerjaanChange(e.target.value)
-                              }
+                              readOnly
                               required
-                              disabled={
-                                 !kategoriLembur ||
-                                 ((mapping[kategoriLembur] || []).length <= 1 &&
-                                    mapping[kategoriLembur]?.[0] === "-")
-                              }
-                              className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                           >
-                              <option value="">
-                                 -- Pilih Jenis Pekerjaan --
-                              </option>
-                              {(mapping[kategoriLembur] || []).map((subJob) => (
-                                 <option key={subJob} value={subJob}>
-                                    {subJob}
-                                 </option>
-                              ))}
-                           </select>
+                              className="w-full h-11 px-3 bg-slate-100 border border-slate-300 rounded-xl text-slate-900"
+                           />
                         </div>
                      </div>
 
                      {/* Checklist / Checkbox "Lembur" (Tampil & Default Terpilih untuk Pengganti Piket / Siaga Libur Nasional) */}
-                     {showLemburCheckbox && (
+                     {false && showLemburCheckbox && (
                         <>
                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-amber-50/90 rounded-xl border border-amber-300 transition-all">
                               <div className="flex items-center gap-2.5">
@@ -2636,7 +2638,7 @@ export const LemburPage = ({
                         <div>
                            <label className="block font-semibold text-slate-700 text-[11px] mb-1">
                               File Dasar Perintah Lembur (ST / Nota / Surat
-                              Dinas) <span className="text-rose-500">*</span>
+                              Dinas) {!areActivityPhotosOptional && <span className="text-rose-500">*</span>}
                            </label>
                            {dasarPerintahLemburUrl ? (
                               <div className="p-2.5 bg-sky-50 border border-sky-300 rounded-xl flex items-center justify-between">

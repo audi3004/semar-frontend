@@ -6,6 +6,7 @@ const USER_RESPONSIBILITY_STORAGE_KEY = "epresensi_user_responsibility_matrix";
 export const DEFAULT_ROLE_PERMISSIONS = {
   superadmin: {
     dashboard: true,
+    "perintah-kerja-lembur": true,
     lembur: true,
     cuti: true,
     ijin: true,
@@ -29,6 +30,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   },
   admin: {
     dashboard: true,
+    "perintah-kerja-lembur": true,
     lembur: true,
     cuti: true,
     ijin: true,
@@ -52,6 +54,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   },
   maker: {
     dashboard: true,
+    "perintah-kerja-lembur": false,
     lembur: true,
     cuti: true,
     ijin: true,
@@ -73,8 +76,33 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     responsibilities: false,
     pengaturan: false
   },
+  monitoring: {
+    dashboard: true,
+    "perintah-kerja-lembur": false,
+    lembur: false,
+    cuti: false,
+    ijin: false,
+    sakit: false,
+    sppd: false,
+    workflow: false,
+    "list-dokumen": true,
+    "report-permohonan": false,
+    "unit-kerja": false,
+    project: false,
+    jabatan: false,
+    pegawai: false,
+    umk: false,
+    "faktor-upah": false,
+    "hari-libur": false,
+    "mutasi-pegawai": false,
+    users: false,
+    roles: false,
+    responsibilities: false,
+    pengaturan: false
+  },
   checker: {
     dashboard: true,
+    "perintah-kerja-lembur": true,
     lembur: false,
     cuti: false,
     ijin: false,
@@ -98,6 +126,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   },
   verification: {
     dashboard: true,
+    "perintah-kerja-lembur": false,
     lembur: false,
     cuti: false,
     ijin: false,
@@ -121,6 +150,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   },
   approved1: {
     dashboard: true,
+    "perintah-kerja-lembur": true,
     lembur: false,
     cuti: false,
     ijin: false,
@@ -144,6 +174,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   },
   approved2: {
     dashboard: true,
+    "perintah-kerja-lembur": false,
     lembur: false,
     cuti: false,
     ijin: false,
@@ -167,6 +198,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   },
   approved3: {
     dashboard: true,
+    "perintah-kerja-lembur": false,
     lembur: false,
     cuti: false,
     ijin: false,
@@ -193,6 +225,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
 export const MENU_MODULES = [
   { id: "dashboard", name: "Dashboard Analisis & Grafik", category: "Operasional" },
   { id: "lembur", name: "Form Pengajuan Lembur", category: "Operasional" },
+  { id: "perintah-kerja-lembur", name: "Surat Perintah Kerja Lembur", category: "Operasional" },
   { id: "cuti", name: "Form Pengajuan Cuti", category: "Operasional" },
   { id: "ijin", name: "Form Pengajuan Ijin", category: "Operasional" },
   { id: "sakit", name: "Form Pengajuan Sakit", category: "Operasional" },
@@ -248,6 +281,8 @@ const MODULE_CODE_TO_MENU_ID = {
   KOEF_TMK: "faktor-upah",
   PEGAWAI: "pegawai",
   LEMBUR: "lembur",
+  PERINTAH_KERJA_LEMBUR: "perintah-kerja-lembur",
+  "PERINTAH-KERJA-LEMBUR": "perintah-kerja-lembur",
   CUTI: "cuti",
   IJIN: "ijin",
   SAKIT: "sakit",
@@ -288,6 +323,7 @@ export const ROLE_LABELS = {
   superadmin: { label: "Super Admin System", level: "Super Admin", color: "rose" },
   admin: { label: "Administrator (Admin)", level: "Level Admin", color: "sky" },
   maker: { label: "Maker (Tenaga Kerja)", level: "Level 0", color: "sky" },
+  monitoring: { label: "Monitoring", level: "Read Only", color: "cyan" },
   checker: { label: "Checker (TL PLN)", level: "Level 1", color: "amber" },
   verification: { label: "Verifikasi (AMN PLN)", level: "Level 2", color: "indigo" },
   approved1: { label: "Approval 1 (MAN PLN)", level: "Level 3", color: "purple" },
@@ -301,7 +337,7 @@ export class ResponsibilityService {
       WORKFLOW_APPROVAL_ROLES.has(roleKey) &&
       WORKFLOW_TRANSACTION_MENUS.has(menuId)
     ) {
-      return this.hasAccess(roleKey, "workflow", nip);
+      return false;
     }
 
     return this.hasAccess(roleKey, menuId, nip);

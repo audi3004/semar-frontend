@@ -9,6 +9,7 @@ import { ShieldAlert } from "lucide-react";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LemburPage } from "./pages/LemburPage";
+import { PerintahKerjaLemburPage } from "./pages/PerintahKerjaLemburPage";
 import { CutiPage } from "./pages/CutiPage";
 import { IjinPage } from "./pages/IjinPage";
 import { SakitPage } from "./pages/SakitPage";
@@ -406,7 +407,7 @@ function AppContent() {
 
     const jabatanId = Number(person.id_jabatan || person.jabatan?.id_jabatan || 0);
     const jabatan = person.jabatan || masterJabatans.find((item) => Number(item.id_jabatan) === jabatanId);
-    const projectId = Number(jabatan?.id_project || currentUser?.id_project || 0);
+    const projectId = Number(person.id_project || person.project?.id_project || currentUser?.id_project || 0);
     const allowedProjectIds = isAdministrator
       ? masterProjects.map((project) => Number(project.id_project))
       : projectId === 1
@@ -810,6 +811,7 @@ function AppContent() {
             )
           }
         />
+        <Route path="perintah-kerja-lembur" element={<RouteAccessGuard moduleId="perintah-kerja-lembur" currentUser={currentUser}><PerintahKerjaLemburPage currentUser={currentUser} navbarScope={navbarScope} startDate={startDate} endDate={endDate} /></RouteAccessGuard>} />
         <Route
           path="cuti"
           element={

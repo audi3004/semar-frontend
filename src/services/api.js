@@ -124,6 +124,11 @@ apiClient.interceptors.response.use(
 export const api = {
   client: apiClient,
 
+  bulkApproveWorkflow: async (payload) => {
+    const res = await apiClient.post("/workflow/bulk-approve", payload);
+    return res.data;
+  },
+
   // Dashboard analytics - data sudah dibatasi backend berdasarkan user, role, dan unitRole.
   getDashboardTransactions: async (params = {}) => {
     const res = await apiClient.get("/dashboard/transactions", { params });
@@ -334,6 +339,11 @@ export const api = {
     });
     return res.data?.data || [];
   },
+  getDasarLembur: async (tanggal) => { const res = await apiClient.get("/lembur/dasar-tersedia", { params: tanggal ? { tanggal } : {} }); return res.data?.data || []; },
+  getSpkl: async (params = {}) => { const res = await apiClient.get("/spkl", { params }); return res.data?.data || []; },
+  createSpkl: async (payload) => { const res = await apiClient.post("/spkl", payload); return res.data?.data || res.data; },
+  updateSpkl: async (id, payload) => { const res = await apiClient.put(`/spkl/${id}`, payload); return res.data?.data || res.data; },
+  deleteSpkl: async (id) => { const res = await apiClient.delete(`/spkl/${id}`); return res.data; },
   createLembur: async (payload) => {
     const res = await apiClient.post("/lembur", payload);
     return res.data;

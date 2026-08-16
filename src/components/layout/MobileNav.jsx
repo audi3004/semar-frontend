@@ -10,6 +10,7 @@ import {
   GitPullRequest,
   Menu,
   Filter
+  ,FileText
 } from "lucide-react";
 import { ResponsibilityService } from "../../services/responsibilityService";
 
@@ -45,6 +46,7 @@ export const MobileNav = ({
 
   const allTabs = [
     { id: "dashboard", label: "Beranda", icon: LayoutDashboard },
+    { id: "perintah-kerja-lembur", label: "SPKL", icon: FileText },
     { id: "lembur", label: "Lembur", icon: Clock },
     { id: "cuti", label: "Cuti", icon: Palmtree },
     { id: "sakit", label: "Sakit", icon: Stethoscope },

@@ -96,7 +96,8 @@ export class AuthService {
       SUPER_ADMIN: "superadmin",
       APPROVAL_1: "approved1",
       APPROVAL_2: "approved2",
-      APPROVAL_3: "approved3"
+      APPROVAL_3: "approved3",
+      MONITORING: "monitoring"
     }[roleCode] || roleCode.toLowerCase();
     return {
       ...user,

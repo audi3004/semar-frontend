@@ -442,6 +442,8 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
   // Approval Signature modal
   const [approveSub, setApproveSub] = useState(null);
   const [isApproveSignOpen, setIsApproveSignOpen] = useState(false);
+  const [selectedApprovalKeys, setSelectedApprovalKeys] = useState([]);
+  const [isBulkApproval, setIsBulkApproval] = useState(false);
 
   // Checker Expense Management (SPPD Task)
   const [checkerExpenses, setCheckerExpenses] = useState([]);
@@ -1375,6 +1377,27 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
     }
 
     try {
+      if (isBulkApproval) {
+        const selectedTransactions = approval1SelectableSubmissions
+          .filter((sub) => selectedApprovalKeys.includes(`${sub.type}:${sub.id}`))
+          .map((sub) => ({ type: sub.type, id: sub.id }));
+        const payload = buildApprovalPayload(dataUrl, "approved1");
+        payload.append("transactions", JSON.stringify(selectedTransactions));
+        await api.bulkApproveWorkflow(payload);
+        setIsApproveSignOpen(false);
+        setIsBulkApproval(false);
+        setSelectedApprovalKeys([]);
+        setApproveSub(null);
+        setAlertModal({
+          isOpen: true,
+          type: "success",
+          title: "Persetujuan Massal Berhasil",
+          message: `${selectedTransactions.length} transaksi berhasil disetujui dengan satu tanda tangan.`
+        });
+        await handleRefresh();
+        return;
+      }
+
       const moduleApi = WORKFLOW_API[approveSub.type];
       if (!moduleApi) throw new Error("Jenis transaksi tidak didukung");
       const shouldPersistCorrection = Object.keys(extra).length > 0 && (
@@ -1450,6 +1473,35 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
       return sub.employeeNip === currentUser.nip || currentUser.role === "maker";
     }
     return sub.currentApproverRole === currentUser.role;
+  };
+
+  const approval1SelectableSubmissions = filteredSubmissions.filter(
+    (sub) => currentUser.role === "approved1" && sub.currentApproverRole === "approved1" && canUserApprove(sub)
+  );
+  const selectableApprovalKeys = approval1SelectableSubmissions.map((sub) => `${sub.type}:${sub.id}`);
+  const isAllApproval1Selected = selectableApprovalKeys.length > 0
+    && selectableApprovalKeys.every((key) => selectedApprovalKeys.includes(key));
+
+  useEffect(() => {
+    setSelectedApprovalKeys((previous) => previous.filter((key) => selectableApprovalKeys.includes(key)));
+  }, [submissions, activeStageTab, searchQuery, selectedOriginFilter, statusCardFilter, selectedProject, selectedUp, selectedUpt, selectedUltg, selectedGi, startDate, endDate]);
+
+  const toggleApprovalSelection = (sub) => {
+    const key = `${sub.type}:${sub.id}`;
+    setSelectedApprovalKeys((previous) => previous.includes(key)
+      ? previous.filter((item) => item !== key)
+      : [...previous, key]);
+  };
+
+  const toggleSelectAllApproval1 = () => {
+    setSelectedApprovalKeys(isAllApproval1Selected ? [] : selectableApprovalKeys);
+  };
+
+  const handleOpenBulkApproval = () => {
+    if (selectedApprovalKeys.length === 0) return;
+    setApproveSub({ currentApproverRole: "approved1" });
+    setIsBulkApproval(true);
+    setIsApproveSignOpen(true);
   };
 
   // Build the 6-level step array with precise status coloring
@@ -1868,6 +1920,29 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
           </div>
         </div>
 
+        {currentUser.role === "approved1" && approval1SelectableSubmissions.length > 0 && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex cursor-pointer items-center gap-2 text-xs font-extrabold text-emerald-950">
+              <input
+                type="checkbox"
+                checked={isAllApproval1Selected}
+                onChange={toggleSelectAllApproval1}
+                className="h-4 w-4 rounded border-emerald-300 accent-emerald-600"
+              />
+              Pilih semua transaksi yang tampil ({approval1SelectableSubmissions.length})
+            </label>
+            <button
+              type="button"
+              onClick={handleOpenBulkApproval}
+              disabled={selectedApprovalKeys.length === 0}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Check className="h-4 w-4 stroke-[3]" />
+              Setujui {selectedApprovalKeys.length} Transaksi
+            </button>
+          </div>
+        )}
+
         {/* 5 Form Category Groups */}
         {[
           {
@@ -1992,6 +2067,9 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                         <table className="w-full text-left text-xs border-collapse">
                           <thead>
                             <tr className="bg-slate-100/90 text-slate-600 font-bold border-b border-slate-200/80 text-[11px] uppercase tracking-wider">
+                              {currentUser.role === "approved1" && (
+                                <th className="py-2.5 px-3.5 text-center w-10">Pilih</th>
+                              )}
                               <th className="py-2.5 px-3.5 text-center w-10">No</th>
                               <th className="py-2.5 px-3.5">ID Dokumen / Tipe</th>
                               <th className="py-2.5 px-3.5">Pemohon</th>
@@ -2011,6 +2089,19 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                               return (
                                 <Fragment key={sub.id}>
                                   <tr className={`hover:bg-slate-50/80 transition-colors ${isActiveUserTurn ? "bg-amber-50/30" : ""}`}>
+                                    {currentUser.role === "approved1" && (
+                                      <td className="py-3 px-3.5 text-center">
+                                        {sub.currentApproverRole === "approved1" && isActiveUserTurn && (
+                                          <input
+                                            type="checkbox"
+                                            checked={selectedApprovalKeys.includes(`${sub.type}:${sub.id}`)}
+                                            onChange={() => toggleApprovalSelection(sub)}
+                                            aria-label={`Pilih ${getFormattedDocNo(sub)}`}
+                                            className="h-4 w-4 cursor-pointer rounded border-emerald-300 accent-emerald-600"
+                                          />
+                                        )}
+                                      </td>
+                                    )}
                                     <td className="py-3 px-3.5 text-center font-mono text-slate-400 text-[11px]">
                                       {idx + 1}
                                     </td>
@@ -2189,7 +2280,7 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                                   {/* Expandable Stepper Details Row */}
                                   {expanded && (
                                     <tr className="bg-slate-50/90 border-b border-slate-200">
-                                      <td colSpan={7} className="p-3 sm:p-4">
+                                      <td colSpan={currentUser.role === "approved1" ? 8 : 7} className="p-3 sm:p-4">
                                         <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-2">
                                           <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
                                             <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
@@ -2339,11 +2430,18 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
         onClose={() => {
           setIsApproveSignOpen(false);
           setApproveSub(null);
+          setIsBulkApproval(false);
         }}
         onSave={handleApproveSignatureSave}
-        title={`Bubuhkan Tandatangan Persetujuan (${getStatusLabel("pending_" + approveSub?.currentApproverRole).replace("Menunggu ", "")})`}
-        subtitle="Bubuhkan tandatangan Anda di bawah ini sebagai bentuk verifikasi persetujuan sah berkas."
-        saveButtonText={approveSub?.currentApproverRole === "checker" ? "Setujui & Kirim ke Approval 1" : "Setujui & Kirim Berkas"}
+        title={isBulkApproval
+          ? `Tandatangan Persetujuan ${selectedApprovalKeys.length} Transaksi`
+          : `Bubuhkan Tandatangan Persetujuan (${getStatusLabel("pending_" + approveSub?.currentApproverRole).replace("Menunggu ", "")})`}
+        subtitle={isBulkApproval
+          ? "Tanda tangan ini akan tersimpan pada seluruh transaksi yang Anda pilih."
+          : "Bubuhkan tandatangan Anda di bawah ini sebagai bentuk verifikasi persetujuan sah berkas."}
+        saveButtonText={isBulkApproval
+          ? `Setujui ${selectedApprovalKeys.length} Transaksi`
+          : approveSub?.currentApproverRole === "checker" ? "Setujui & Kirim ke Approval 1" : "Setujui & Kirim Berkas"}
       />
 
       {/* 4. Request Revision modal */}

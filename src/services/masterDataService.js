@@ -186,10 +186,11 @@ const INITIAL_UNITS = [
   { id_unit_uit: 1, id_unit_upt: 12, id_unit_ultg: 104, id_unit_gi: 1006, uit: "UIT JBT", upt: "UPT Surakarta", ultg: "ULTG Surakarta", gardu_induk: "GI Solo Baru", id_gaji: 3 }
 ];
 const INITIAL_JABATAN = [
-  { id_jabatan: 1, nama_jabatan: "Operator Gardu Induk", id_project: 1 },
-  { id_jabatan: 2, nama_jabatan: "Petugas Line Walker", id_project: 2 },
-  { id_jabatan: 3, nama_jabatan: "Team Leader Gardu Induk", id_project: 1 },
-  { id_jabatan: 4, nama_jabatan: "Manajer ULTG", id_project: 1 }
+  { id_jabatan: 1, nama_jabatan: "Operator Gardu Induk" },
+  { id_jabatan: 2, nama_jabatan: "Petugas Line Walker" },
+  { id_jabatan: 3, nama_jabatan: "Team Leader Gardu Induk" },
+  { id_jabatan: 4, nama_jabatan: "Manajer ULTG" },
+  { id_jabatan: 5, nama_jabatan: "Manager Unit Pelaksana Teknis (PLN)" }
 ];
 const INITIAL_PEGAWAI = [
   { id_pegawai: 1, nip: "8912345SMG", nama: "Budi Santoso", tgl_masuk: "2022-03-15", id_jabatan: 1, id_unit_uit: 1, id_unit_upt: 10, id_unit_ultg: 100, id_unit_gi: 1001, id_mutasi: null, active: "Y" },
@@ -356,6 +357,7 @@ export const SCHEMAS = {
   m_petugas: z.object({
     id_petugas: z.number().int(),
     id_unit: z.number().int().optional(),
+    id_project: z.number().int(),
     id_jabatan: z.number().int().optional().nullable(),
     id_gaji: z.number().int().optional(),
     nip: z.string().min(1, "NIP wajib diisi").max(50),
@@ -462,7 +464,6 @@ export const SCHEMAS = {
   m_jabatan: z.object({
     id_jabatan: z.number(),
     nama_jabatan: z.string().min(3, "Nama Jabatan minimal 3 karakter").max(100, "Maksimal 100 karakter"),
-    id_project: z.number({ required_error: "Proyek Kerja wajib dipilih", invalid_type_error: "Proyek Kerja wajib dipilih" }),
     active: z.enum(["Y", "N"]).optional()
   }),
   m_pegawai: z.object({
@@ -1012,8 +1013,8 @@ export class MasterDataService {
   static verifyForeignKeysIntegrity(table, id) {
     const idNum = Number(id);
     if (table === "m_project") {
-      const jabatans = this.getAll("m_jabatan", { limit: 9999 }).data;
-      if (jabatans.some((j) => Number(j.id_project) === idNum)) return { safe: false, referringTable: "m_jabatan (Master Jabatan)" };
+      const petugas = this.getAll("m_petugas", { limit: 9999 }).data;
+      if (petugas.some((item) => Number(item.id_project) === idNum)) return { safe: false, referringTable: "m_petugas (Master Petugas)" };
     }
     if (table === "m_umk") {
       const gajis = this.getAll("m_gaji", { limit: 9999 }).data;
