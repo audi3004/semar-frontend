@@ -644,26 +644,30 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
   };
 
   // Helper functions for project and date resolution inside WorkflowPage
-  const getProjectIdForSubmission = (sub, usersList = [], jabatans = []) => {
+  const getProjectIdForSubmission = (sub, usersList = []) => {
+    const directProjectId = Number(
+      sub.idProject || sub.id_project || sub.project?.id_project ||
+      sub.petugas?.id_project || sub.petugas?.project?.id_project || 0
+    );
+    if (directProjectId) return directProjectId;
     const employee = (usersList || []).find((u) => u.nip === sub.employeeNip);
     if (employee) {
-      const matchedJab = (jabatans || []).find(
-        (j) => j.nama_jabatan?.toLowerCase() === (employee.jabatan || "").toLowerCase()
-      );
-      if (matchedJab) {
-        return String(matchedJab.id_project);
-      }
+      const petugasProjectId = Number(employee.id_project || employee.petugas?.id_project || employee.project?.id_project || employee.petugas?.project?.id_project || 0);
+      if (petugasProjectId) return petugasProjectId;
+      const assignedProjects = employee.multiProject || employee.projects || employee.pegawai?.projects || [];
+      if (assignedProjects.length === 1) return Number(assignedProjects[0]?.id_project || assignedProjects[0]) || null;
     }
-    const matchedJab = (jabatans || []).find(
-      (j) => j.nama_jabatan?.toLowerCase() === (sub.employeeJabatan || "").toLowerCase()
-    );
-    if (matchedJab) {
-      return String(matchedJab.id_project);
-    }
-    return "1";
+    return null;
   };
 
-  const getProjectNameForSubmission = (sub, usersList = [], jabatans = [], projects = []) => {
+  const getProjectNameForSubmission = (sub, usersList = [], projects = []) => {
+    if (sub.projectName || sub.project?.nama_project || sub.petugas?.project?.nama_project) {
+      return sub.projectName || sub.project?.nama_project || sub.petugas?.project?.nama_project;
+    }
+    const directProjectId = getProjectIdForSubmission(sub, usersList);
+    if (directProjectId) {
+      return projects.find((project) => Number(project.id_project) === Number(directProjectId))?.nama_project || "";
+    }
     const employee = (usersList || []).find((u) => u.nip === sub.employeeNip);
     if (employee) {
       if (employee.multiProject && Array.isArray(employee.multiProject) && employee.multiProject.length > 0) {
@@ -671,34 +675,12 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
         const proj = (projects || []).find((p) => String(p.id_project) === String(firstProjId));
         if (proj) return proj.nama_project;
       }
-      const matchedJab = (jabatans || []).find(
-        (j) => j.nama_jabatan?.toLowerCase() === (employee.jabatan || "").toLowerCase()
-      );
-      if (matchedJab) {
-        const proj = (projects || []).find((p) => Number(p.id_project) === Number(matchedJab.id_project));
-        if (proj) return proj.nama_project;
-      }
     }
-    const matchedJab = (jabatans || []).find(
-      (j) => j.nama_jabatan?.toLowerCase() === (sub.employeeJabatan || "").toLowerCase()
-    );
-    if (matchedJab) {
-      const proj = (projects || []).find((p) => Number(p.id_project) === Number(matchedJab.id_project));
-      if (proj) return proj.nama_project;
-    }
-    return (projects && projects[0]?.nama_project) || "Operator Gardu Induk";
+    return "";
   };
 
   // Base filtered submissions respecting global header selections and user role-based restrictions
   const baseFilteredSubmissions = submissions.filter((sub) => {
-    const usesBackendApprovalScope = [
-      "checker",
-      "verification",
-      "approved1",
-      "approved2",
-      "approved3"
-    ].includes(currentUser?.role);
-
     // `/pending` is already authoritative for approver role + UnitRole scope.
     // Rechecking it here previously removed valid API rows when local profile/
     // assignment metadata had not finished loading or used a different shape.
@@ -714,11 +696,15 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
 
     // 2. Global "Pilih Project" filter from header
     if (!navbarScope.isAdministrator && navbarScope.allowedProjectIds?.length) {
-      const subProjectId = Number(getProjectIdForSubmission(sub, allUsers, masterJabatans));
-      if (!navbarScope.allowedProjectIds.includes(subProjectId)) return false;
+      const subProjectId = getProjectIdForSubmission(sub, allUsers);
+      if (subProjectId && !navbarScope.allowedProjectIds.includes(Number(subProjectId))) return false;
+      if (selectedProject && selectedProject !== "Semua Project") {
+        const selectedProjectId = masterProjects.find((project) => project.nama_project === selectedProject)?.id_project;
+        if (subProjectId && selectedProjectId && Number(subProjectId) !== Number(selectedProjectId)) return false;
+      }
     } else if (!navbarScope.allowedProjectIds && selectedProject && selectedProject !== "Semua Project") {
-      const subProject = getProjectNameForSubmission(sub, allUsers, masterJabatans, masterProjects);
-      if (subProject !== selectedProject) return false;
+      const subProject = getProjectNameForSubmission(sub, allUsers, masterProjects);
+      if (subProject && subProject !== selectedProject) return false;
     }
 
     // 3. Global unit filters from header
@@ -727,7 +713,9 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
     const hasSpecificUnitFilter = [selectedUp, selectedUpt, selectedUltg, selectedGi]
       .some((value) => value && !value.startsWith("Semua "));
     if ((!navbarScope.isAdministrator || hasSpecificUnitFilter) && navbarScope.activeFilterUnitIds?.length) {
-      if (!submissionUnitId || !navbarScope.activeFilterUnitIds.includes(submissionUnitId)) return false;
+      // Data `/pending` sudah dibatasi UnitRole oleh backend. Metadata unit yang
+      // belum termuat di frontend tidak boleh membuat transaksi valid menghilang.
+      if (submissionUnitId && !navbarScope.activeFilterUnitIds.includes(submissionUnitId)) return false;
     }
 
     const transactionDate = sub.tanggalLembur || sub.tanggalMulai || sub.tanggalBerangkat || sub.tanggalPengajuan || "";

@@ -105,6 +105,8 @@ const common = (item, type, id) => {
     employeeNip: item.petugas?.nip || String(item.id_petugas || ""),
     employeeName: item.petugas?.nama || "-",
     employeeJabatan: item.petugas?.jabatan?.nama_jabatan || "-",
+    idProject: Number(item.id_project || item.project?.id_project || item.petugas?.id_project || item.petugas?.project?.id_project || 0) || null,
+    projectName: item.project?.nama_project || item.petugas?.project?.nama_project || "",
     id_unit: item.petugas?.id_unit ?? item.petugas?.unit?.id_unit,
     unitHierarchy,
     unitUpt: findUnitName(/\b(UP|UPT|UNIT PELAKSANA)\b/i),
