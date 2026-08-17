@@ -1137,6 +1137,18 @@ const DocumentViewerModalContent = ({
                            </div>
                         </div>
 
+                        {submission.type === "lembur" && (
+                           <div className="bg-white p-3 border border-black text-xs space-y-2 page-break-inside-avoid">
+                              <p className="font-extrabold text-black border-b border-black pb-1 uppercase tracking-tight flex items-center gap-1.5">
+                                 <FileText className="w-3.5 h-3.5 text-black" /> DASAR LEMBUR
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-black">
+                                 <p><span>Nomor SPKL:</span> <strong className="ml-1">{submission.nomorSpkl || "-"}</strong></p>
+                                 <p><span>Pegawai yang Mengajukan:</span> <strong className="ml-1">{submission.pengajuLemburNip ? `${submission.pengajuLemburNip} - ` : ""}{submission.pengajuLemburNama || submission.employeeName || "-"}</strong></p>
+                              </div>
+                           </div>
+                        )}
+
                         {/* Dynamic Content Details by Submission Type */}
                         <div className="bg-white p-3 border border-black text-xs space-y-3 page-break-inside-avoid">
                            <p className="font-extrabold text-black border-b border-black pb-1 uppercase tracking-tight flex items-center gap-1.5">

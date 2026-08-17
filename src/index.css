@@ -186,3 +186,43 @@
   font-weight: 600;
   outline: none;
 }
+
+.gi-factory-marker {
+  background: transparent;
+  border: 0;
+}
+
+.gi-factory-pin {
+  position: relative;
+  display: flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid white;
+  border-radius: 14px 14px 14px 3px;
+  background: var(--pin-color);
+  color: white;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--pin-color) 38%, transparent);
+  transform: rotate(-45deg);
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.gi-factory-pin svg {
+  transform: rotate(45deg);
+}
+
+.gi-factory-marker:hover .gi-factory-pin {
+  filter: brightness(1.08);
+  transform: rotate(-45deg) scale(1.12) translate(2px, -2px);
+}
+
+.gi-map-tooltip {
+  border: 1px solid rgb(226 232 240) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 16px 34px rgb(15 23 42 / 0.16) !important;
+}
+
+.gi-map-tooltip::before {
+  border-top-color: white !important;
+}

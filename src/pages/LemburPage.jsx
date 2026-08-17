@@ -175,6 +175,9 @@ const mapApiLembur = (item) => {
       isHariLibur: item.is_hari_libur === "Y",
       dasarLemburType: item.dasar_lembur_type,
       dasarReferenceId: item.id_spkl_petugas || item.id_cuti || item.id_ijin || item.id_sakit,
+      nomorSpkl: item.spklAssignment?.spkl?.nomor_dokumen || "",
+      pengajuLemburNama: item.petugas?.nama || `Petugas #${item.id_petugas}`,
+      pengajuLemburNip: item.petugas?.nip || "",
       kegiatanDetail: item.detail_pekerjaan_lembur || "",
       petugasPendampingNip: item.petugasCuti?.nip || "",
       petugasPendampingNama: item.petugasCuti?.nama || "",
@@ -402,6 +405,7 @@ export const LemburPage = ({
    const isOperatorCuti = ["CUTI", "IJIN", "SAKIT"].includes(selectedBasis?.type) || jenisPekerjaan === "Pengganti Piket (Operator sedang cuti)";
    const isSiagaLibur = selectedBasis?.kode_jenis_pekerjaan === "SIAGA_HARI_LIBUR" || jenisPekerjaan === "Siaga / Libur Nasional";
    const areActivityPhotosOptional = ["CUTI", "IJIN", "SAKIT"].includes(selectedBasis?.type) || selectedBasis?.kode_jenis_pekerjaan === "SIAGA_HARI_LIBUR" || isPhotoEvidenceOptional(kategoriLembur, jenisPekerjaan);
+   const isSpecialEightHourOvertime = isOperatorCuti || isSiagaLibur;
    const hourOptions = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
    const handleBasisChange = (key) => {
       setSelectedBasisKey(key); const basis = availableBases.find((item) => `${item.type}:${item.reference_id}` === key);
@@ -2634,8 +2638,8 @@ export const LemburPage = ({
                            </div>
                         )}
 
-                        {/* File Dasar Perintah Lembur */}
-                        <div>
+                        {/* File Dasar Perintah Lembur hanya untuk pekerjaan reguler */}
+                        {!isSpecialEightHourOvertime && <div>
                            <label className="block font-semibold text-slate-700 text-[11px] mb-1">
                               File Dasar Perintah Lembur (ST / Nota / Surat
                               Dinas) {!areActivityPhotosOptional && <span className="text-rose-500">*</span>}
@@ -2681,7 +2685,7 @@ export const LemburPage = ({
                                  />
                               </label>
                            )}
-                        </div>
+                        </div>}
                      </div>
 
                      <div>
@@ -2980,8 +2984,11 @@ export const LemburPage = ({
                const corrNum = Number(jumlahJamKoreksiInput) || 0;
                const newWeeklyTotal =
                   Math.round((accum.weeklyHours + corrNum) * 10) / 10;
-               const isWeeklyLimitExceeded = newWeeklyTotal > 18;
-               const isDailyLimitExceeded = corrNum > 4;
+               const isSpecialEightHourCorrection = /pengganti (piket|cuti|ijin|izin|sakit)|siaga|libur nasional/i.test(checkerReviewSub.jenisPekerjaan || "");
+               const dailyHourLimit = isSpecialEightHourCorrection ? 8 : 4;
+               const weeklyHourLimit = isSpecialEightHourCorrection ? 40 : 18;
+               const isWeeklyLimitExceeded = newWeeklyTotal > weeklyHourLimit;
+               const isDailyLimitExceeded = corrNum > dailyHourLimit;
 
                const corrEstCost = calculateOvertimeCost(
                   checkerReviewSub.employeeGajiPokok || 55e5,
@@ -3039,8 +3046,8 @@ export const LemburPage = ({
                               dapat mengisi{" "}
                               <strong>Jumlah Lembur Koreksi (angka jam)</strong>{" "}
                               dan <strong>Catatan Koreksi</strong>. Ketentuan
-                              batas maksimal: <strong>4 jam/hari</strong> dan
-                              total akumulasi <strong>18 jam/minggu</strong>.
+                              batas maksimal: <strong>{dailyHourLimit} jam/hari</strong> dan
+                              total akumulasi <strong>{weeklyHourLimit} jam/minggu</strong>.
                            </p>
                         </div>
 
@@ -3135,8 +3142,8 @@ export const LemburPage = ({
                                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                                  <span className="font-bold">
                                     {isDailyLimitExceeded
-                                       ? `Input Koreksi (${corrNum} Jam) melebihi batas harian 4 jam!`
-                                       : `Total akumulasi minggu ini (${newWeeklyTotal} Jam) melebihi batas mingguan 18 jam!`}
+                                       ? `Input Koreksi (${corrNum} Jam) melebihi batas harian ${dailyHourLimit} jam!`
+                                       : `Total akumulasi minggu ini (${newWeeklyTotal} Jam) melebihi batas mingguan ${weeklyHourLimit} jam!`}
                                  </span>
                               </div>
                            )}
@@ -3248,8 +3255,8 @@ export const LemburPage = ({
                                     placeholder="Contoh: 4"
                                  />
                                  <p className="text-[10px] text-slate-500 font-medium mt-1">
-                                    *Mengacu pada limit harian maks 4 jam dan
-                                    mingguan maks 18 jam.
+                                    *Mengacu pada limit harian maks {dailyHourLimit} jam dan
+                                    mingguan maks {weeklyHourLimit} jam.
                                  </p>
                               </div>
 

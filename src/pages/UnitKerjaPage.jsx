@@ -31,6 +31,8 @@ export const UnitKerjaPage = () => {
   const [editingUnit, setEditingUnit] = useState(null);
   const [parentId, setParentId] = useState("");
   const [unitName, setUnitName] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
   const [activeStatus, setActiveStatus] = useState("Y");
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,6 +84,8 @@ export const UnitKerjaPage = () => {
       return (
         String(node.id_unit).includes(query) ||
         String(node.nama_unit || "").toLowerCase().includes(query) ||
+        String(node.lat ?? "").includes(query) ||
+        String(node.lon ?? "").includes(query) ||
         String(node.indukUnit?.nama_unit || "").toLowerCase().includes(query) ||
         node.children.some(hasMatch)
       );
@@ -133,6 +137,8 @@ export const UnitKerjaPage = () => {
     setEditingUnit(null);
     setParentId("");
     setUnitName("");
+    setLatitude("");
+    setLongitude("");
     setActiveStatus("Y");
     setFormError("");
     setIsFormOpen(true);
@@ -142,6 +148,8 @@ export const UnitKerjaPage = () => {
     setEditingUnit(unit);
     setParentId(unit.id_induk_unit == null ? "" : String(unit.id_induk_unit));
     setUnitName(unit.nama_unit || "");
+    setLatitude(unit.lat ?? "");
+    setLongitude(unit.lon ?? "");
     setActiveStatus(unit.is_active || "Y");
     setFormError("");
     setIsFormOpen(true);
@@ -157,7 +165,9 @@ export const UnitKerjaPage = () => {
 
     const payload = {
       id_induk_unit: parentId === "" ? null : Number(parentId),
-      nama_unit: normalizedName
+      nama_unit: normalizedName,
+      lat: latitude === "" ? null : Number(latitude),
+      lon: longitude === "" ? null : Number(longitude)
     };
     if (editingUnit) payload.is_active = activeStatus;
 
@@ -204,18 +214,20 @@ export const UnitKerjaPage = () => {
         <input
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="Cari ID, nama unit, atau unit induk..."
+          placeholder="Cari ID, nama unit, koordinat, atau unit induk..."
           className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-100"
         />
       </div><select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Jenis</option><option value="UP">UP</option><option value="UPT">UPT</option><option value="ULTG">ULTG</option><option value="GI">GI</option></select><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select></div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[720px] text-xs">
+        <table className="w-full min-w-[920px] text-xs">
           <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider">
             <tr>
               <th className="px-4 py-3 w-24 text-left">ID</th>
               <th className="px-4 py-3 text-left">Hierarki Unit</th>
               <th className="px-4 py-3 text-left">Unit Induk</th>
+              <th className="px-4 py-3 text-right">Latitude</th>
+              <th className="px-4 py-3 text-right">Longitude</th>
               <th className="px-4 py-3 w-28 text-center">Jenis</th>
               <th className="px-4 py-3 w-28 text-center">Status</th>
               <th className="px-4 py-3 text-center w-24">Aksi</th>
@@ -249,6 +261,8 @@ export const UnitKerjaPage = () => {
                   <td className="px-4 py-3 text-slate-600 font-medium">
                     {unit.indukUnit?.nama_unit || (unit.id_induk_unit ? `Unit #${unit.id_induk_unit}` : "—")}
                   </td>
+                  <td className="px-4 py-3 text-right font-mono text-slate-700">{unit.lat ?? "—"}</td>
+                  <td className="px-4 py-3 text-right font-mono text-slate-700">{unit.lon ?? "—"}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`inline-flex px-2 py-1 rounded-full font-black ${kindStyle[kind]}`}>{kind}</span>
                   </td>
@@ -266,7 +280,7 @@ export const UnitKerjaPage = () => {
               );
             })}
             {visibleRows.length === 0 && (
-              <tr><td colSpan="6" className="px-4 py-12 text-center text-slate-500">Data unit tidak ditemukan.</td></tr>
+              <tr><td colSpan="8" className="px-4 py-12 text-center text-slate-500">Data unit tidak ditemukan.</td></tr>
             )}
           </tbody>
         </table>
@@ -313,6 +327,17 @@ export const UnitKerjaPage = () => {
                   ))}
                 </select>
                 <p className="text-[11px] text-slate-500 mt-1.5">Pilihan ini berasal dari GET /api/unit.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="unit-latitude" className="block text-xs font-bold text-slate-700 mb-1.5">Latitude</label>
+                  <input id="unit-latitude" type="number" step="0.0000001" min="-90" max="90" value={latitude} onChange={(event) => setLatitude(event.target.value)} placeholder="Contoh: -6.9666670" className="w-full h-11 px-3.5 rounded-xl border border-slate-200 text-xs font-mono font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-100" />
+                </div>
+                <div>
+                  <label htmlFor="unit-longitude" className="block text-xs font-bold text-slate-700 mb-1.5">Longitude</label>
+                  <input id="unit-longitude" type="number" step="0.0000001" min="-180" max="180" value={longitude} onChange={(event) => setLongitude(event.target.value)} placeholder="Contoh: 110.4166640" className="w-full h-11 px-3.5 rounded-xl border border-slate-200 text-xs font-mono font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-100" />
+                </div>
               </div>
 
               {editingUnit && (

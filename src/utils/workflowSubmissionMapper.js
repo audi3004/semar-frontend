@@ -139,6 +139,10 @@ export const mapWorkflowLembur = (item) => ({
   biayaLembur: Number(item.biaya_lembur || 0),
   estimasiBiayaRupiah: Number(item.biaya_lembur || 0),
   isHariLibur: item.is_hari_libur === "Y",
+  dasarLemburType: item.dasar_lembur_type || "",
+  nomorSpkl: item.spklAssignment?.spkl?.nomor_dokumen || "",
+  pengajuLemburNama: item.petugas?.nama || "-",
+  pengajuLemburNip: item.petugas?.nip || "",
   makerSignatureUrl: resolveBackendFileUrl(item.maker_signature)
 });
 

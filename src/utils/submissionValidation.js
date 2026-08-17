@@ -176,6 +176,10 @@ export function validateLemburMaxHours(
     jenisPekerjaan === "Siaga / Libur Nasional" ||
     (typeof jenisPekerjaan === "string" && (
       jenisPekerjaan.toLowerCase().includes("pengganti piket") ||
+      jenisPekerjaan.toLowerCase().includes("pengganti cuti") ||
+      jenisPekerjaan.toLowerCase().includes("pengganti ijin") ||
+      jenisPekerjaan.toLowerCase().includes("pengganti izin") ||
+      jenisPekerjaan.toLowerCase().includes("pengganti sakit") ||
       jenisPekerjaan.toLowerCase().includes("siaga") ||
       jenisPekerjaan.toLowerCase().includes("libur nasional")
     ));

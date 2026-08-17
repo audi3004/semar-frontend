@@ -18,6 +18,7 @@ const emptyForm = {
 };
 
 const dateValue = (value) => value ? String(value).slice(0, 10) : "";
+const rupiah = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
 export const PegawaiPage = () => {
   const [activeTab, setActiveTab] = useState("pegawai");
@@ -40,16 +41,21 @@ export const PegawaiPage = () => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [pegawaiRes, petugasRes, jabatanRes, unitRes, umkRes, projectRes] = await Promise.all([
+      const [pegawaiRes, petugasRes, jabatanRes, unitRes, umkRes, projectRes, upahRes] = await Promise.all([
         api.client.get("/pegawai", { params: { limit: 1000 } }),
         api.client.get("/petugas", { params: { limit: 1000 } }),
         api.client.get("/jabatan", { params: { limit: 1000 } }),
         api.client.get("/unit", { params: { limit: 1000 } }),
         api.client.get("/umk", { params: { limit: 1000 } }),
-        api.client.get("/projects", { params: { limit: 1000 } })
+        api.client.get("/projects", { params: { limit: 1000 } }),
+        api.client.get("/gaji/upah-petugas")
       ]);
+      const upahByPetugas = new Map((upahRes.data?.data || []).map((item) => [Number(item.id_petugas), item]));
       setPegawai(pegawaiRes.data?.data || []);
-      setPetugas(petugasRes.data?.data || []);
+      setPetugas((petugasRes.data?.data || []).map((item) => ({
+        ...item,
+        perhitungan_upah: upahByPetugas.get(Number(item.id_petugas)) || null
+      })));
       setPositions(jabatanRes.data?.data || []);
       setUnits(unitRes.data?.data || []);
       setUmkList(umkRes.data?.data || []);
@@ -74,7 +80,10 @@ export const PegawaiPage = () => {
       item.jabatan?.nama_jabatan,
       item.project?.nama_project,
       item.unit?.nama_unit,
-      item.umk?.nama_umk
+      item.umk?.nama_wilayah,
+      item.umk?.jenis_wilayah,
+      item.umk?.tahun_umk,
+      item.perhitungan_upah?.status_perhitungan
     ].some((value) => String(value || "").toLowerCase().includes(query))));
     return sortTableRows(matches, sortBy, sortOrder, { id: (i) => Number(i.id_pegawai || i.id_petugas), jabatan: (i) => i.jabatan?.nama_jabatan || "", project: (i) => activeTab === "pegawai" ? (i.projects || []).map((p) => p.nama_project).join(", ") : i.project?.nama_project || "", unit: (i) => i.unit?.nama_unit || "" });
   }, [records, searchQuery, unitFilter, statusFilter, sortBy, sortOrder]);
@@ -189,12 +198,13 @@ export const PegawaiPage = () => {
       </div><select value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Unit</option>{units.map((unit) => <option key={unit.id_unit} value={unit.id_unit}>{unit.nama_unit}</option>)}</select><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold"><option value="all">Semua Status</option><option value="Y">Aktif</option><option value="N">Nonaktif</option></select></div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1100px] text-xs">
+        <table className={`w-full ${activeTab === "petugas" ? "min-w-[1350px]" : "min-w-[1100px]"} text-xs`}>
           <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider">
             <tr>
               <SortableTableHeader field="id" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">ID</SortableTableHeader><SortableTableHeader field="nip" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">NIP</SortableTableHeader><SortableTableHeader field="nama" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Nama</SortableTableHeader>
               <SortableTableHeader field="jabatan" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Jabatan</SortableTableHeader><SortableTableHeader field="project" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Project</SortableTableHeader><SortableTableHeader field="unit" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="px-4 py-3">Unit</SortableTableHeader>
               {activeTab === "petugas" && <th className="px-4 py-3 text-left">UMK</th>}
+              {activeTab === "petugas" && <th className="px-4 py-3 text-right">Upah Aktif</th>}
               <th className="px-4 py-3 text-left">Tanggal Masuk</th><th className="px-4 py-3 text-left">Tanggal Lahir</th><th className="px-4 py-3 text-center">Status</th><th className="px-4 py-3 text-center">Aksi</th>
             </tr>
           </thead>
@@ -204,14 +214,15 @@ export const PegawaiPage = () => {
                 <td className="px-4 py-3 font-black">#{activeTab === "pegawai" ? item.id_pegawai : item.id_petugas}</td>
                 <td className="px-4 py-3 font-mono font-bold text-indigo-700">{item.nip || "-"}</td><td className="px-4 py-3 font-bold text-slate-900">{item.nama || "-"}</td>
                 <td className="px-4 py-3">{item.jabatan?.nama_jabatan || `#${item.id_jabatan}`}</td><td className="px-4 py-3">{activeTab === "pegawai" ? (item.projects || []).map((project) => project.nama_project).join(", ") || "-" : item.project?.nama_project || "-"}</td><td className="px-4 py-3">{item.unit?.nama_unit || `#${item.id_unit}`}</td>
-                {activeTab === "petugas" && <td className="px-4 py-3">{item.umk?.nama_umk || item.umk?.kab_kota || (item.id_umk ? `#${item.id_umk}` : "-")}</td>}
+                {activeTab === "petugas" && <td className="px-4 py-3"><div className="font-bold text-slate-800">{item.umk?.nama_wilayah || (item.id_umk ? `UMK #${item.id_umk}` : "UMK belum ditentukan")}</div>{item.umk && <div className="mt-0.5 text-[10px] text-slate-500">{item.umk.jenis_wilayah ? `${item.umk.jenis_wilayah} · ` : ""}{item.umk.tahun_umk} · {rupiah.format(Number(item.umk.nominal_umk || 0))}</div>}</td>}
+                {activeTab === "petugas" && <td className="px-4 py-3 text-right">{item.perhitungan_upah?.status_perhitungan === "OK" ? <><div className="font-black text-emerald-700">{rupiah.format(Number(item.perhitungan_upah.total_gaji || 0))}</div><div className="mt-0.5 text-[10px] text-slate-500">Tarif lembur {rupiah.format(Number(item.perhitungan_upah.tarif_lembur_per_jam || 0))}/jam</div></> : <span className="inline-block max-w-44 text-[10px] font-bold leading-relaxed text-rose-600">{item.perhitungan_upah?.status_perhitungan || "Perhitungan belum tersedia"}</span>}</td>}
                 <td className="px-4 py-3">{dateValue(item.tgl_masuk) || "-"}</td><td className="px-4 py-3">{dateValue(item.tgl_lahir) || "-"}</td>
                 <td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-full font-bold ${item.is_active === "N" ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{item.is_active === "N" ? "Nonaktif" : "Aktif"}</span></td>
                 <td className="px-4 py-3 text-center"><button onClick={() => openEditForm(item)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100"><Edit2 className="w-4 h-4" /></button></td>
               </tr>
             ))}
-            {!isLoading && filteredRecords.length === 0 && <tr><td colSpan={activeTab === "petugas" ? 11 : 10} className="px-4 py-12 text-center text-slate-500">Data tidak ditemukan.</td></tr>}
-            {isLoading && <tr><td colSpan={activeTab === "petugas" ? 11 : 10} className="px-4 py-12 text-center text-slate-500">Memuat data...</td></tr>}
+            {!isLoading && filteredRecords.length === 0 && <tr><td colSpan={activeTab === "petugas" ? 12 : 10} className="px-4 py-12 text-center text-slate-500">Data tidak ditemukan.</td></tr>}
+            {isLoading && <tr><td colSpan={activeTab === "petugas" ? 12 : 10} className="px-4 py-12 text-center text-slate-500">Memuat data...</td></tr>}
           </tbody>
         </table>
       </div>
@@ -232,7 +243,7 @@ export const PegawaiPage = () => {
               <Field label="Unit" required><select value={form.id_unit} onChange={(e) => updateForm("id_unit", e.target.value)} className="form-input" required><option value="">Pilih unit</option>{units.map((item) => <option key={item.id_unit} value={item.id_unit}>{item.nama_unit}</option>)}</select></Field>
               {activeTab === "pegawai" && <div className="sm:col-span-2"><span className="block text-xs font-bold text-slate-700 mb-2">Project workflow</span><div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl border border-slate-200 p-3">{projects.map((project) => <label key={project.id_project} className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={form.project_ids.includes(Number(project.id_project))} onChange={(event) => updateForm("project_ids", event.target.checked ? [...form.project_ids, Number(project.id_project)] : form.project_ids.filter((id) => id !== Number(project.id_project)))} />{project.nama_project}</label>)}{projects.length === 0 && <span className="text-xs text-slate-500">Belum ada project aktif.</span>}</div></div>}
               {activeTab === "petugas" && <Field label="Project" required><select value={form.project_id} onChange={(e) => updateForm("project_id", e.target.value)} className="form-input" required><option value="">Pilih project</option>{projects.map((item) => <option key={item.id_project} value={item.id_project}>{item.nama_project}</option>)}</select></Field>}
-              {activeTab === "petugas" && <Field label="UMK"><select value={form.id_umk} onChange={(e) => updateForm("id_umk", e.target.value)} className="form-input"><option value="">Tanpa UMK</option>{umkList.map((item) => <option key={item.id_umk} value={item.id_umk}>{item.nama_umk || item.kab_kota || `UMK #${item.id_umk}`}</option>)}</select></Field>}
+              {activeTab === "petugas" && <Field label="UMK"><select value={form.id_umk} onChange={(e) => updateForm("id_umk", e.target.value)} className="form-input"><option value="">Tanpa UMK</option>{umkList.map((item) => <option key={item.id_umk} value={item.id_umk}>{item.nama_wilayah ? `${item.nama_wilayah} (${item.tahun_umk}) - ${rupiah.format(Number(item.nominal_umk || 0))}` : `UMK #${item.id_umk}`}</option>)}</select></Field>}
               <Field label="Tanggal Masuk" required><input type="date" value={form.tgl_masuk} onChange={(e) => updateForm("tgl_masuk", e.target.value)} className="form-input" required /></Field>
               <Field label="Tanggal Lahir"><input type="date" value={form.tgl_lahir} onChange={(e) => updateForm("tgl_lahir", e.target.value)} className="form-input" /></Field>
               {(editingRecord || activeTab === "petugas") && <Field label="Status"><select value={form.is_active} onChange={(e) => updateForm("is_active", e.target.value)} className="form-input"><option value="Y">Aktif</option><option value="N">Nonaktif</option></select></Field>}

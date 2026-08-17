@@ -140,6 +140,10 @@ export const api = {
       sppd: []
     };
   },
+  getDashboardMapUnits: async () => {
+    const res = await apiClient.get("/dashboard/map-units");
+    return res.data?.data || [];
+  },
 
   getCompletedDocuments: async (params = {}) => {
     const res = await apiClient.get("/dashboard/documents", { params });

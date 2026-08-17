@@ -10,6 +10,7 @@ import { SignatureModal } from "../components/common/SignatureModal";
 import { DocumentViewerModal } from "../components/common/DocumentViewerModal";
 import { ExportService } from "../services/exportService";
 import { LoadingSkeleton } from "../components/common/LoadingSkeleton";
+import { GiLocationMap } from "../components/dashboard/GiLocationMap";
 import {
   Clock,
   Palmtree,
@@ -68,6 +69,8 @@ export const DashboardPage = ({
   const [selectedStatusCard, setSelectedStatusCard] = useState("all");
   const [expandedCardKey, setExpandedCardKey] = useState(null);
   const [dashboardSubmissions, setDashboardSubmissions] = useState(submissions || []);
+  const [mapData, setMapData] = useState({ units: [], scope_level: "NONE" });
+  const [mapLoading, setMapLoading] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return undefined;
@@ -96,6 +99,25 @@ export const DashboardPage = ({
     loadDashboard();
     return () => { active = false; };
   }, [currentUser?.id_user, currentUser?.id, startDate, endDate]);
+
+  useEffect(() => {
+    if (!currentUser || currentUser.role === "maker") {
+      setMapData({ units: [], scope_level: "NONE" });
+      return undefined;
+    }
+    let active = true;
+    setMapLoading(true);
+    api.getDashboardMapUnits()
+      .then((result) => { if (active) setMapData(result || { units: [], scope_level: "NONE" }); })
+      .catch((error) => {
+        if (active) {
+          console.error("Gagal memuat peta unit GI:", error);
+          setMapData({ units: [], scope_level: "NONE" });
+        }
+      })
+      .finally(() => { if (active) setMapLoading(false); });
+    return () => { active = false; };
+  }, [currentUser?.id_user, currentUser?.id, currentUser?.role]);
 
   if (!currentUser) return <LoadingSkeleton variant="dashboard" />;
 
@@ -520,6 +542,8 @@ export const DashboardPage = ({
       let key = "Lainnya";
       if (paretoGroupBy === "unit") {
         key = sub.unitUltg || sub.unitUpt || sub.garduInduk || sub.ultg || sub.upt || "UPT Semarang";
+      } else if (paretoGroupBy === "unit GI" || paretoGroupBy === "gi") {
+        key = sub.garduInduk || sub.unitGi || sub.gi || sub.lokasiGi || sub.lokasiPekerjaan || sub.unitUltg || "Gardu Induk / Lokasi";
       } else if (paretoGroupBy === "pegawai") {
         key = sub.employeeName || sub.employeeNip || "Pegawai";
       } else {
@@ -1876,6 +1900,7 @@ export const DashboardPage = ({
                   >
                     <option value="pekerjaan">Berdasarkan Pekerjaan / Penyebab</option>
                     <option value="unit">Berdasarkan Unit / ULTG</option>
+                    <option value="unit GI">Berdasarkan Gardu Induk</option>
                     <option value="pegawai">Berdasarkan Pegawai</option>
                   </select>
                 </div>
@@ -1904,7 +1929,7 @@ export const DashboardPage = ({
               </div>
 
               {/* Pareto Composed Chart */}
-              <ParetoOvertimeChart data={paretoData} />
+              <ParetoOvertimeChart data={paretoData} groupBy={paretoGroupBy} />
             </div>
 
             {/* Visual Distribution Charts Row: Category Donut & Area Group Bar */}
@@ -2432,6 +2457,8 @@ export const DashboardPage = ({
           </div>
         </div>
       </div>
+
+      {!isMaker && <GiLocationMap data={mapData} loading={mapLoading} />}
 
       {/* Signature Modal */}
       <SignatureModal

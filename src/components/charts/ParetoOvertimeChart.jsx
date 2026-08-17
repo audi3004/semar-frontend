@@ -12,14 +12,22 @@ import {
   ReferenceLine
 } from "recharts";
 
-const CustomParetoTooltip = ({ active, payload, label }) => {
+const CustomParetoTooltip = ({ active, payload, label, groupBy }) => {
   if (active && payload && payload.length) {
     const dataItem = payload[0]?.payload || {};
+    const groupTitle = groupBy === "unit GI" || groupBy === "gi"
+      ? "Gardu Induk"
+      : groupBy === "unit"
+        ? "Unit / ULTG"
+        : groupBy === "pegawai"
+          ? "Pegawai"
+          : "Kategori Pekerjaan";
     return (
       <div className="bg-slate-900/95 border border-slate-800/80 backdrop-blur-md p-3.5 rounded-2xl shadow-xl text-white select-none min-w-[220px] animate-in fade-in duration-100">
-        <p className="text-[11px] font-black tracking-wider text-amber-400 mb-2 uppercase border-b border-slate-800 pb-1.5 truncate">
-          {label || dataItem.category}
-        </p>
+        <div className="mb-2 border-b border-slate-800 pb-1.5">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{groupTitle}</p>
+          <p className="text-[11px] font-black tracking-wider text-amber-400 uppercase truncate">{label || dataItem.category}</p>
+        </div>
         <div className="space-y-1.5 text-xs">
           <div className="flex items-center justify-between gap-4">
             <span className="text-slate-300 font-medium flex items-center gap-1.5">
@@ -63,7 +71,7 @@ const CustomParetoTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-export const ParetoOvertimeChart = ({ data = [] }) => {
+export const ParetoOvertimeChart = ({ data = [], groupBy = "pekerjaan" }) => {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
     setIsMounted(true);
@@ -169,7 +177,7 @@ export const ParetoOvertimeChart = ({ data = [] }) => {
               offset: 15
             }}
           />
-          <Tooltip content={<CustomParetoTooltip />} />
+          <Tooltip content={<CustomParetoTooltip groupBy={groupBy} />} />
           <Legend
             verticalAlign="top"
             align="right"
