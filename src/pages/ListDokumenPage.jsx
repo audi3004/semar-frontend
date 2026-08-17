@@ -25,6 +25,7 @@ import { MasterDataService } from "../services/masterDataService";
 import { formatDateIndonesian, getFormattedDocNo } from "../utils/formatters";
 import { api } from "../services/api";
 import { mapWorkflowSubmission } from "../utils/workflowSubmissionMapper";
+import { matchesNavbarTransactionFilter } from "../utils/navbarTransactionFilter";
 
 // Fallback Mock Approved Data if submissions prop is empty or has few approved docs
 const FALLBACK_APPROVED_SUBMISSIONS = [
@@ -183,7 +184,8 @@ export const ListDokumenPage = ({
   selectedUltg = "Semua ULTG",
   selectedGi = "Semua GI",
   globalStartDate = "",
-  globalEndDate = ""
+  globalEndDate = "",
+  navbarProjectIds = []
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
@@ -198,7 +200,8 @@ export const ListDokumenPage = ({
     try {
       const rows = await api.getCompletedDocuments({
         start_date: globalStartDate || undefined,
-        end_date: globalEndDate || undefined
+        end_date: globalEndDate || undefined,
+        id_project: navbarProjectIds.length === 1 ? navbarProjectIds[0] : undefined
       });
       setServerDocuments((Array.isArray(rows) ? rows : []).map(mapWorkflowSubmission));
     } catch (error) {
@@ -211,7 +214,7 @@ export const ListDokumenPage = ({
 
   useEffect(() => {
     if (currentUser) loadDocuments();
-  }, [currentUser?.id_user, globalStartDate, globalEndDate]);
+  }, [currentUser?.id_user, globalStartDate, globalEndDate, navbarProjectIds.join(",")]);
 
   // Detail Modal State
   const [viewingDoc, setViewingDoc] = useState(null);
@@ -290,15 +293,15 @@ export const ListDokumenPage = ({
     const validUsers = AuthService.getUsers() || [];
 
     return allApproved.filter((doc) => {
+      const selectedProjectRecord = masterProjects.find((project) => project.nama_project === selectedProject);
+      if (!matchesNavbarTransactionFilter(doc, {
+        projectIds: selectedProjectRecord ? [selectedProjectRecord.id_project] : navbarProjectIds,
+        startDate: globalStartDate,
+        endDate: globalEndDate
+      })) return false;
       // Category Filter
       if (selectedCategory !== "ALL" && doc.type !== selectedCategory) {
         return false;
-      }
-
-      // Project Filter
-      if (selectedProject && selectedProject !== "Semua Project") {
-        const docProject = getDocProjectName(doc, validUsers);
-        if (docProject !== selectedProject) return false;
       }
 
       // Location Unit Filters (UPT, ULTG, GI)
@@ -350,6 +353,9 @@ export const ListDokumenPage = ({
     selectedUpt,
     selectedUltg,
     selectedGi,
+    globalStartDate,
+    globalEndDate,
+    navbarProjectIds,
     searchQuery,
     currentUser,
     masterJabatans,

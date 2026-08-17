@@ -36,6 +36,7 @@ import { getAccessToken } from "../../services/api";
 import { loadSubmissionDocumentData } from "../../services/submissionDocumentService";
 import { resolveSubmissionStatus, isSubmissionFinalApproved } from "../../utils/submissionStatus";
 import { resolveSubmissionWorkUnits } from "../../utils/submissionWorkUnits";
+import { ReportDocument } from "./ReportDocument";
 
 const plnLogo = PLN_LOGO_PNG_BASE64;
 
@@ -141,6 +142,7 @@ const DocumentViewerModalContent = ({
    reportFilterInfo = {},
    reportSignatories = [],
    isPeriodCompleted = true,
+   canDownloadReport = true,
    isOpen,
    onClose,
 }) => {
@@ -217,7 +219,7 @@ const DocumentViewerModalContent = ({
 
    const handleDownloadPDF = async () => {
       if (isReport) {
-         if (!isPeriodCompleted) return;
+         if (!canDownloadReport) return;
          await PdfService.downloadReportPdf(
             reportSubmissions,
             reportFilterInfo,
@@ -629,17 +631,17 @@ const DocumentViewerModalContent = ({
                      <button
                         onClick={handleDownloadPDF}
                         disabled={
-                           isReport ? !isPeriodCompleted : !isFullyApproved
+                           isReport ? !canDownloadReport : !isFullyApproved
                         }
                         className={`px-3 py-1.5 min-h-[36px] text-xs font-bold rounded-xl border flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-xs ${
-                           (isReport ? !isPeriodCompleted : !isFullyApproved)
+                           (isReport ? !canDownloadReport : !isFullyApproved)
                               ? "bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed opacity-60"
                               : "bg-rose-600 hover:bg-rose-700 text-white border-rose-500 shadow-rose-600/20"
                         }`}
                         title={
                            isReport
-                              ? !isPeriodCompleted
-                                 ? "Generate/Download PDF hanya untuk periode yang sudah selesai"
+                              ? !canDownloadReport
+                                 ? "Unduh PDF resmi menunggu kelengkapan tanda tangan report"
                                  : "Unduh Dokumen PDF Resmi"
                               : !isFullyApproved
                                 ? "Unduh PDF belum dapat dilakukan. Menunggu proses approval berjenjang selesai (Approval 3 / Disetujui)"
@@ -758,7 +760,18 @@ const DocumentViewerModalContent = ({
                   </div>
                ) : isReport ? (
                   /* HTML FORMAL VIEW FOR REPORT DOCUMENT */
-                  <div className="printable-a4-document max-w-[210mm] w-full mx-auto bg-white border border-black p-5 sm:p-6 space-y-4 rounded-none text-black">
+                  <>
+                     <div className="printable-a4-document max-w-[297mm] w-full mx-auto bg-white border border-black rounded-none text-black">
+                        <ReportDocument
+                           currentDateStr={currentDateStr}
+                           docNoStr={reportFilterInfo?.nomorDokumen || "DRAFT REPORT"}
+                           data={reportSubmissions}
+                           title={reportFilterInfo?.reportLabel || "LAPORAN DOKUMEN ELEKTRONIK"}
+                           filterInfo={reportFilterInfo}
+                           signatories={reportSignatories}
+                        />
+                     </div>
+                  <div className="hidden">
                      {/* Kop Surat Header */}
                      <DocumentLetterhead
                         label="LAPORAN RESUME"
@@ -1039,6 +1052,7 @@ const DocumentViewerModalContent = ({
                         </div>
                      </div>
                   </div>
+                  </>
                ) : (
                   /* HTML FORMAL VIEW FOR SINGLE SUBMISSION DOCUMENT */
                   <>
@@ -1144,7 +1158,7 @@ const DocumentViewerModalContent = ({
                               </p>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-black">
                                  <p><span>Nomor SPKL:</span> <strong className="ml-1">{submission.nomorSpkl || "-"}</strong></p>
-                                 <p><span>Pegawai yang Mengajukan:</span> <strong className="ml-1">{submission.pengajuLemburNip ? `${submission.pengajuLemburNip} - ` : ""}{submission.pengajuLemburNama || submission.employeeName || "-"}</strong></p>
+                                 <p><span>Pemberi Perintah (Checker):</span> <strong className="ml-1">{submission.pembuatSpklNip ? `${submission.pembuatSpklNip} - ` : ""}{submission.pembuatSpklNama || "-"}</strong></p>
                               </div>
                            </div>
                         )}

@@ -122,7 +122,11 @@ const common = (item, type, id) => {
   };
 };
 
-export const mapWorkflowLembur = (item) => ({
+export const mapWorkflowLembur = (item) => {
+  const spklCreator = item.spklAssignment?.spkl?.createdBy;
+  const spklCreatorIdentity = spklCreator?.pegawai || spklCreator?.petugas;
+
+  return ({
   ...common(item, "lembur", item.id_lembur),
   nomorDokumen: item.nomor_dokumen || `LMB-${String(item.id_lembur).padStart(6, "0")}`,
   tanggalPengajuan: String(item.created_at || item.tgl_lembur || "").slice(0, 10),
@@ -141,10 +145,13 @@ export const mapWorkflowLembur = (item) => ({
   isHariLibur: item.is_hari_libur === "Y",
   dasarLemburType: item.dasar_lembur_type || "",
   nomorSpkl: item.spklAssignment?.spkl?.nomor_dokumen || "",
-  pengajuLemburNama: item.petugas?.nama || "-",
-  pengajuLemburNip: item.petugas?.nip || "",
+  pembuatSpklNama: spklCreatorIdentity?.nama || spklCreator?.username || "-",
+  pembuatSpklNip: spklCreatorIdentity?.nip || "",
+  pengajuLemburNama: spklCreatorIdentity?.nama || spklCreator?.username || "-",
+  pengajuLemburNip: spklCreatorIdentity?.nip || "",
   makerSignatureUrl: resolveBackendFileUrl(item.maker_signature)
-});
+  });
+};
 
 export const mapWorkflowCuti = (item) => ({
   ...common(item, "cuti", item.id_cuti),

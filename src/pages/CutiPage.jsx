@@ -4,6 +4,7 @@ import { AuthService } from "../services/authService";
 import { api } from "../services/api";
 import { SignatureModal } from "../components/common/SignatureModal";
 import { DocumentViewerModal } from "../components/common/DocumentViewerModal";
+import { matchesNavbarTransactionFilter } from "../utils/navbarTransactionFilter";
 import { RejectModal } from "../components/common/RejectModal";
 import { RevisionModal } from "../components/common/RevisionModal";
 import { AlertNotificationModal } from "../components/common/AlertNotificationModal";
@@ -28,7 +29,10 @@ export const CutiPage = ({
   currentUser,
   submissions,
   settings,
-  onRefreshData
+    onRefreshData,
+    navbarProjectIds = [],
+    startDate = "",
+    endDate = ""
 }) => {
   const [activeSubTab, setActiveSubTab] = useState("daftar");
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -101,7 +105,9 @@ export const CutiPage = ({
 
   useEffect(() => { loadCuti(); }, []);
 
-  const cutiSubmissions = apiCuti;
+  const cutiSubmissions = apiCuti.filter((submission) =>
+    matchesNavbarTransactionFilter(submission, { projectIds: navbarProjectIds, startDate, endDate })
+  );
 
   const displaySubmissions = cutiSubmissions.filter((s) => {
     const sLower = s.status ? s.status.toLowerCase() : "";

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AuthService } from "./services/authService";
 import { DataService } from "./services/dataService";
@@ -405,23 +405,36 @@ function AppContent() {
           .filter((id) => isAdministrator || scopedIds.has(id))
       : scopedUnits.map((unit) => Number(unit.id_unit));
 
-    const jabatanId = Number(person.id_jabatan || person.jabatan?.id_jabatan || 0);
-    const jabatan = person.jabatan || masterJabatans.find((item) => Number(item.id_jabatan) === jabatanId);
-    const projectId = Number(person.id_project || person.project?.id_project || currentUser?.id_project || 0);
+    const isPetugasAccount = Boolean(currentUser?.id_petugas || currentUser?.petugas?.id_petugas);
+    const pegawaiProjects = Array.isArray(currentUser?.pegawai?.projects)
+      ? currentUser.pegawai.projects
+      : Array.isArray(currentUser?.projects) ? currentUser.projects : [];
+    const petugasProjectId = Number(
+      currentUser?.petugas?.id_project || currentUser?.petugas?.project?.id_project ||
+      person.id_project || person.project?.id_project || currentUser?.id_project || 0
+    );
+    const assignedProjectIds = isPetugasAccount
+      ? [petugasProjectId].filter(Boolean)
+      : pegawaiProjects
+          .filter((project) => project.is_active !== "N" && project.PegawaiProject?.is_active !== "N")
+          .map((project) => Number(project.id_project))
+          .filter(Boolean);
     const allowedProjectIds = isAdministrator
       ? masterProjects.map((project) => Number(project.id_project))
-      : projectId === 1
-        ? [1, 2].filter((id) => masterProjects.some((project) => Number(project.id_project) === id))
-        : [projectId].filter(Boolean);
+      : [...new Set(assignedProjectIds)].filter((id) =>
+          masterProjects.some((project) => Number(project.id_project) === id)
+        );
     const projectNames = masterProjects
       .filter((project) => allowedProjectIds.includes(Number(project.id_project)))
       .map((project) => project.nama_project);
 
     return {
       isAdministrator,
-      projectId,
+      projectId: allowedProjectIds[0] || null,
       allowedProjectIds,
-      projectLabel: isAdministrator ? "Semua Project" : (projectId === 1 ? projectNames.join(" & ") : (projectNames[0] || "Project tidak ditemukan")),
+      projectLabel: isAdministrator || allowedProjectIds.length > 1
+        ? "Semua Project"
+        : (projectNames[0] || "Project tidak ditemukan"),
       upName: isAdministrator ? "Semua UP" : (up?.nama_unit || "Semua UP"),
       uptName: isAdministrator ? "Semua UPT" : (upt?.nama_unit || "Semua UPT"),
       ultgName: isAdministrator ? "Semua ULTG" : (ultg?.nama_unit || "Semua ULTG"),
@@ -594,6 +607,17 @@ function AppContent() {
     navbarScope
   ]);
 
+  const activeNavbarProjectIds = useMemo(() => {
+    const selected = masterProjects.find((project) => project.nama_project === selectedProject);
+    if (selected) return [Number(selected.id_project)];
+    return navbarScope.isAdministrator ? [] : navbarScope.allowedProjectIds;
+  }, [masterProjects, selectedProject, navbarScope.isAdministrator, navbarScope.allowedProjectIds]);
+
+  const navbarProjectList = useMemo(() => navbarScope.isAdministrator
+    ? masterProjects
+    : masterProjects.filter((project) => navbarScope.allowedProjectIds.includes(Number(project.id_project))),
+  [masterProjects, navbarScope.isAdministrator, navbarScope.allowedProjectIds]);
+
   const handleResetFilters = () => {
     setSelectedProject(navbarScope.projectLabel);
     setSelectedUp(navbarScope.upName);
@@ -604,6 +628,34 @@ function AppContent() {
     setStartDate(defaultDates.startDate);
     setEndDate(defaultDates.endDate);
   };
+
+  const previousRouteRef = useRef(location.pathname);
+  useEffect(() => {
+    if (previousRouteRef.current === location.pathname) return;
+    previousRouteRef.current = location.pathname;
+    handleResetFilters();
+  }, [location.pathname]);
+
+  const selectNavbarGi = useCallback((unitName) => {
+    if (!unitName) {
+      setSelectedUpt(navbarScope.uptName);
+      setSelectedUltg(navbarScope.ultgName);
+      setSelectedGi(navbarScope.giName);
+      return;
+    }
+    const byId = new Map(masterUnits.map((unit) => [Number(unit.id_unit), unit]));
+    let cursor = masterUnits.find((unit) => unit.nama_unit === unitName);
+    const path = [];
+    const visited = new Set();
+    while (cursor && !visited.has(Number(cursor.id_unit))) {
+      visited.add(Number(cursor.id_unit));
+      path.push(cursor);
+      cursor = byId.get(Number(cursor.id_induk_unit));
+    }
+    setSelectedUpt(path.find((unit) => /^UPT\b/i.test(unit.nama_unit))?.nama_unit || navbarScope.uptName);
+    setSelectedUltg(path.find((unit) => /^ULTG\b/i.test(unit.nama_unit))?.nama_unit || navbarScope.ultgName);
+    setSelectedGi(unitName);
+  }, [masterUnits, navbarScope.uptName, navbarScope.ultgName, navbarScope.giName]);
 
   const handleTabChange = (tabId) => {
     const isMaker = currentUser?.role === "maker";
@@ -756,8 +808,8 @@ function AppContent() {
             uptList={hierarchicalUnitLists.uptList}
             ultgList={hierarchicalUnitLists.ultgList}
             giList={hierarchicalUnitLists.giList}
-            projectList={masterProjects}
-            projectReadOnly={!navbarScope.isAdministrator}
+            projectList={navbarProjectList}
+            projectReadOnly={!navbarScope.isAdministrator && navbarScope.allowedProjectIds.length <= 1}
             upReadOnly={!navbarScope.canSelectUnit}
             uptReadOnly={!navbarScope.canSelectUnit}
             ultgReadOnly={!navbarScope.canSelectUnit}
@@ -791,6 +843,11 @@ function AppContent() {
               selectedUpt={selectedUpt}
               selectedUltg={selectedUltg}
               selectedGi={selectedGi}
+              setSelectedUpt={setSelectedUpt}
+              setSelectedUltg={setSelectedUltg}
+              setSelectedGi={setSelectedGi}
+              navbarScope={navbarScope}
+              navbarProjectIds={activeNavbarProjectIds}
               onRefreshData={refreshData}
               onNavigateToTab={handleTabChange}
             />
@@ -807,6 +864,9 @@ function AppContent() {
                 submissions={filteredSubmissions}
                 settings={settings}
                 onRefreshData={refreshData}
+                navbarProjectIds={activeNavbarProjectIds}
+                startDate={startDate}
+                endDate={endDate}
               />
             )
           }
@@ -823,6 +883,9 @@ function AppContent() {
                 submissions={filteredSubmissions}
                 settings={settings}
                 onRefreshData={refreshData}
+                navbarProjectIds={activeNavbarProjectIds}
+                startDate={startDate}
+                endDate={endDate}
               />
             )
           }
@@ -838,6 +901,9 @@ function AppContent() {
                 submissions={filteredSubmissions}
                 settings={settings}
                 onRefreshData={refreshData}
+                navbarProjectIds={activeNavbarProjectIds}
+                startDate={startDate}
+                endDate={endDate}
               />
             )
           }
@@ -852,6 +918,9 @@ function AppContent() {
                 currentUser={currentUser}
                 submissions={filteredSubmissions}
                 onRefreshData={refreshData}
+                navbarProjectIds={activeNavbarProjectIds}
+                startDate={startDate}
+                endDate={endDate}
               />
             )
           }
@@ -866,6 +935,9 @@ function AppContent() {
                 currentUser={currentUser}
                 submissions={filteredSubmissions}
                 onRefreshData={refreshData}
+                navbarProjectIds={activeNavbarProjectIds}
+                startDate={startDate}
+                endDate={endDate}
               />
             )
           }
@@ -881,12 +953,13 @@ function AppContent() {
               <ListDokumenPage
                 currentUser={currentUser}
                 submissions={filteredSubmissions}
-                selectedProject="Semua Project"
+                selectedProject={selectedProject}
                 selectedUpt={selectedUpt}
                 selectedUltg={selectedUltg}
                 selectedGi={selectedGi}
                 globalStartDate={startDate}
                 globalEndDate={endDate}
+                navbarProjectIds={activeNavbarProjectIds}
               />
             </RouteAccessGuard>
           }
@@ -895,7 +968,20 @@ function AppContent() {
           path="report-permohonan"
           element={
             <RouteAccessGuard moduleId="report-permohonan" currentUser={currentUser}>
-              <ReportPermohonanPage currentUser={currentUser} submissions={filteredSubmissions} />
+              <ReportPermohonanPage
+                currentUser={currentUser}
+                submissions={filteredSubmissions}
+                navbarProjectIds={activeNavbarProjectIds}
+                selectedProject={selectedProject}
+                startDate={startDate}
+                endDate={endDate}
+                setStartDate={setStartDate}
+                setEndDate={setEndDate}
+                selectedUpt={selectedUpt}
+                selectedUltg={selectedUltg}
+                selectedGi={selectedGi}
+                onSelectGi={selectNavbarGi}
+              />
             </RouteAccessGuard>
           }
         />

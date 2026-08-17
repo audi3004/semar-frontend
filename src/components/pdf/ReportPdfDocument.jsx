@@ -16,8 +16,10 @@ import {
 import { DataService } from "../../services/dataService";
 import { PLN_LOGO_PNG_BASE64 } from "../../assets/plnLogoBase64";
 import semarLogoDefault from "../../assets/logo_semar_trns.png";
+import { DOCUMENT_LETTERHEAD } from "./documentLetterhead";
 
 const plnLogo = PLN_LOGO_PNG_BASE64;
+const pdfSafeText = (value) => String(value ?? "-").replace(/([\/-])/g, "$1\u200B");
 
 function generateQrCodeDataUrlSync(text) {
    try {
@@ -73,8 +75,8 @@ const getSingkatanUpt = (unitStr) => {
 
 const styles = StyleSheet.create({
    page: {
-      paddingTop: 55,
-      paddingBottom: 55,
+      paddingTop: 82,
+      paddingBottom: 62,
       paddingLeft: 30,
       paddingRight: 30,
       fontFamily: "Helvetica",
@@ -86,44 +88,54 @@ const styles = StyleSheet.create({
    // Header Kop Surat Formal
    headerContainer: {
       position: "absolute",
-      top: 15,
+      top: 18,
       left: 30,
       right: 30,
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingBottom: 6,
-      borderBottomWidth: 1.5,
-      borderBottomColor: "#000000",
+      paddingBottom: 9,
+      borderBottomWidth: 2,
+      borderBottomColor: DOCUMENT_LETTERHEAD.colors.primary,
    },
    headerLeft: {
-      flexDirection: "column",
-      alignItems: "flex-start",
+      flexDirection: "row",
+      alignItems: "center",
+      width: "58%",
    },
    plnLogo: {
-      height: 18,
-      width: "auto",
-      marginBottom: 2,
+      width: 142,
+      height: 31,
+      objectFit: "contain",
+      marginRight: 10,
+   },
+   headerIdentity: {
+      borderLeftWidth: 1,
+      borderLeftColor: "#CBD5E1",
+      paddingLeft: 10,
+      flexShrink: 1,
    },
    headerUnitText: {
       fontSize: 7.5,
       fontFamily: "Helvetica-Bold",
-      color: "#000000",
+      color: DOCUMENT_LETTERHEAD.colors.primary,
       textTransform: "uppercase",
    },
    headerSubUnitText: {
       fontSize: 7,
       fontFamily: "Helvetica",
-      color: "#000000",
+      color: DOCUMENT_LETTERHEAD.colors.muted,
+      marginTop: 2,
    },
    headerRight: {
       flexDirection: "column",
       alignItems: "flex-end",
+      width: "40%",
    },
    headerTitle: {
       fontSize: 11,
       fontFamily: "Helvetica-Bold",
-      color: "#000000",
+      color: DOCUMENT_LETTERHEAD.colors.primary,
       textTransform: "uppercase",
       letterSpacing: -0.2,
    },
@@ -142,7 +154,7 @@ const styles = StyleSheet.create({
       marginBottom: 8,
       paddingBottom: 4,
       borderBottomWidth: 1,
-      borderBottomColor: "#000000",
+      borderBottomColor: DOCUMENT_LETTERHEAD.colors.primary,
    },
    filterText: {
       fontSize: 7.5,
@@ -159,40 +171,46 @@ const styles = StyleSheet.create({
    },
    tableHeader: {
       flexDirection: "row",
-      backgroundColor: "#F1F5F9",
+      backgroundColor: DOCUMENT_LETTERHEAD.colors.soft,
       borderBottomWidth: 1,
       borderBottomColor: "#000000",
-      alignItems: "center",
-      minHeight: 20,
+      alignItems: "stretch",
+      minHeight: 24,
    },
    tableRow: {
       flexDirection: "row",
       borderBottomWidth: 0.5,
       borderBottomColor: "#000000",
-      alignItems: "center",
-      minHeight: 18,
+      alignItems: "stretch",
+      minHeight: 24,
    },
    th: {
-      fontSize: 7,
+      fontSize: 6.6,
       fontFamily: "Helvetica-Bold",
       color: "#000000",
-      padding: 3,
+      paddingVertical: 5,
+      paddingHorizontal: 3,
+      lineHeight: 1.2,
       borderRightWidth: 0.5,
       borderRightColor: "#000000",
    },
    td: {
-      fontSize: 7,
+      fontSize: 6.5,
       fontFamily: "Helvetica",
       color: "#000000",
-      padding: 3,
+      paddingVertical: 4,
+      paddingHorizontal: 3,
+      lineHeight: 1.28,
       borderRightWidth: 0.5,
       borderRightColor: "#000000",
    },
    tdLast: {
-      fontSize: 7,
+      fontSize: 6.5,
       fontFamily: "Helvetica",
       color: "#000000",
-      padding: 3,
+      paddingVertical: 4,
+      paddingHorizontal: 3,
+      lineHeight: 1.28,
    },
 
    // Signatures Section
@@ -377,8 +395,9 @@ export const ReportPdfDocument = ({
       unitUptClean || filterInfo.unit || filterInfo.unitUpt,
    );
 
-   let rawSigs =
-      Array.isArray(signatories) && signatories.length > 0
+   let rawSigs = filterInfo.hideSignatories
+      ? []
+      : Array.isArray(signatories) && signatories.length > 0
          ? signatories
          : defaultSignatories;
    if (
@@ -396,7 +415,7 @@ export const ReportPdfDocument = ({
    const hasAnyData = rawSigs.some(
       (s) => s && (s.name || s.nip || s.title || s.role),
    );
-   if (!hasAnyData) {
+   if (!hasAnyData && !filterInfo.hideSignatories) {
       rawSigs = defaultSignatories;
    }
 
@@ -418,12 +437,12 @@ export const ReportPdfDocument = ({
             <View style={styles.headerContainer} fixed>
                <View style={styles.headerLeft}>
                   <Image src={plnLogo} style={styles.plnLogo} />
-                  <View>
+                  <View style={styles.headerIdentity}>
                      <Text style={styles.headerUnitText}>
-                        Unit Pelaksana 2 - Jawa Tengah & DI Yogyakarta
+                        {DOCUMENT_LETTERHEAD.unitName}
                      </Text>
                      <Text style={styles.headerSubUnitText}>
-                        Wilayah Kerja Unit Transmisi Jawa Bagian Tengah
+                        {DOCUMENT_LETTERHEAD.territoryName}
                      </Text>
                   </View>
                </View>
@@ -470,7 +489,7 @@ export const ReportPdfDocument = ({
 
             {/* DATA TABLE */}
             <View style={styles.table}>
-               <View style={styles.tableHeader}>
+               <View style={styles.tableHeader} fixed>
                   <Text
                      style={[styles.th, { width: "4%", textAlign: "center" }]}
                   >
@@ -507,7 +526,7 @@ export const ReportPdfDocument = ({
                         nominal = formatRupiah(item.totalEstimasiBiaya || 0);
 
                      return (
-                        <View key={item.id || idx} style={styles.tableRow}>
+                        <View key={item.id || idx} style={styles.tableRow} wrap={false}>
                            <Text
                               style={[
                                  styles.td,
@@ -522,7 +541,7 @@ export const ReportPdfDocument = ({
                                  { width: "16%", fontFamily: "Helvetica-Bold" },
                               ]}
                            >
-                              {getFormattedDocNo(item)}
+                              {pdfSafeText(getFormattedDocNo(item))}
                            </Text>
                            <Text style={[styles.td, { width: "11%" }]}>
                               {item.tanggalPengajuan
@@ -536,7 +555,7 @@ export const ReportPdfDocument = ({
                                     fontSize: 7,
                                  }}
                               >
-                                 {item.employeeName || item.namaPegawai || "-"}
+                                 {pdfSafeText(item.employeeName || item.namaPegawai || "-")}
                               </Text>
                               {item.employeeNip || item.nip ? (
                                  <Text
@@ -546,7 +565,7 @@ export const ReportPdfDocument = ({
                                        marginTop: 1,
                                     }}
                                  >
-                                    {item.employeeNip || item.nip}
+                                    {pdfSafeText(item.employeeNip || item.nip)}
                                  </Text>
                               ) : null}
                            </View>
@@ -563,17 +582,17 @@ export const ReportPdfDocument = ({
                               {item.type || item.jenisPermohonan || "-"}
                            </Text>
                            <Text style={[styles.td, { width: "14%" }]}>
-                              {item.unitKerja ||
+                              {pdfSafeText(item.unitKerja ||
                                  item.unitUltg ||
                                  item.unitUpt ||
                                  item.unit ||
-                                 "-"}
+                                 "-")}
                            </Text>
                            <Text style={[styles.td, { width: "17%" }]}>
-                              {item.keterangan || item.kegiatanDetail ||
+                              {pdfSafeText(item.keterangan || item.kegiatanDetail ||
                                  item.maksudPerjalanan || item.maksudSppd ||
                                  item.diagnosaSingkat || item.ijinReasonType || item.cutiType || item.alasan ||
-                                 "-"}
+                                 "-")}
                            </Text>
                            <Text
                               style={[

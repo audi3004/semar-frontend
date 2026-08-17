@@ -4,6 +4,7 @@ import { DataService } from "../services/dataService";
 import { api } from "../services/api";
 import { SignatureModal } from "../components/common/SignatureModal";
 import { DocumentViewerModal } from "../components/common/DocumentViewerModal";
+import { matchesNavbarTransactionFilter } from "../utils/navbarTransactionFilter";
 import { RejectModal } from "../components/common/RejectModal";
 import { RevisionModal } from "../components/common/RevisionModal";
 import { AlertNotificationModal } from "../components/common/AlertNotificationModal";
@@ -52,7 +53,10 @@ const ActionTooltip = ({ text }) => (
 export const SakitPage = ({
   currentUser,
   submissions,
-  onRefreshData
+    onRefreshData,
+    navbarProjectIds = [],
+    startDate = "",
+    endDate = ""
 }) => {
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [selectedDocSub, setSelectedDocSub] = useState(null);
@@ -138,7 +142,9 @@ export const SakitPage = ({
   };
   useEffect(() => { loadSakit(); }, []);
 
-  const sakitSubmissions = apiSakit;
+  const sakitSubmissions = apiSakit.filter((submission) =>
+    matchesNavbarTransactionFilter(submission, { projectIds: navbarProjectIds, startDate, endDate })
+  );
 
   const displaySubmissions = sakitSubmissions.filter((s) => {
     const sLower = s.status ? s.status.toLowerCase() : "";

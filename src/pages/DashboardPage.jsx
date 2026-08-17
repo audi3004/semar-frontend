@@ -44,6 +44,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { formatDateIndonesian, formatRupiah, getFormattedDocNo } from "../utils/formatters";
+import { matchesNavbarTransactionFilter } from "../utils/navbarTransactionFilter";
 
 export const DashboardPage = ({
   currentUser,
@@ -56,6 +57,11 @@ export const DashboardPage = ({
   selectedUpt = "Semua UPT",
   selectedUltg = "Semua ULTG",
   selectedGi = "Semua GI",
+  setSelectedUpt = () => {},
+  setSelectedUltg = () => {},
+  setSelectedGi = () => {},
+  navbarScope,
+  navbarProjectIds = [],
   onRefreshData,
   onNavigateToTab
 }) => {
@@ -124,6 +130,7 @@ export const DashboardPage = ({
   const isMaker = currentUser?.role === "maker";
   // Scope identitas, role dan UnitRole telah diterapkan backend; bagian ini hanya filter tampilan.
   const safeSubmissions = dashboardSubmissions.filter((sub) => {
+    if (!matchesNavbarTransactionFilter(sub, { projectIds: navbarProjectIds, startDate, endDate })) return false;
     const unitNames = (sub.unitHierarchy || []).map((unit) => String(unit?.name || "").trim().toLowerCase()).filter(Boolean);
     const matchesUnit = (selected, fallback) => {
       if (!selected || selected.startsWith("Semua ")) return true;
@@ -133,14 +140,6 @@ export const DashboardPage = ({
     if (!matchesUnit(selectedUpt, sub.unitUpt || sub.upt)) return false;
     if (!matchesUnit(selectedUltg, sub.unitUltg || sub.ultg)) return false;
     if (!matchesUnit(selectedGi, sub.garduInduk || sub.gi)) return false;
-
-    // Date range juga diterapkan backend untuk efisiensi query.
-    const subDateStr = sub.tanggalLembur || sub.tanggalMulai || sub.tanggalBerangkat || sub.tanggalPengajuan || sub.createdAt || "";
-    if (subDateStr) {
-      const dateOnly = subDateStr.substring(0, 10);
-      if (startDate && dateOnly < startDate) return false;
-      if (endDate && dateOnly > endDate) return false;
-    }
 
     return true;
   });
@@ -427,22 +426,18 @@ export const DashboardPage = ({
   lemburSubmissionsFiltered.forEach((s) => {
     const st = (s.status || "").toLowerCase();
     const isApproved = ["approved", "disetujui", "completed", "acc", "approved_2", "selesai"].includes(st);
-    const isPending = st === "pending" || st === "submitted" || st === "menunggu" || st === "draft" || st === "review" || !st;
-
-    const jam = Number(s.durasiJam) || 0;
-    const rate = 62500;
-    const costSubmitted = Number(s.estimasiBiayaRupiah) || (jam * rate);
+    // Nilai biaya dari backend sudah merupakan total transaksi berdasarkan jam lembur.
+    // Frontend hanya mengelompokkan nominal tersebut berdasarkan status workflow.
+    const transactionCost = Number(s.estimasiBiayaRupiah ?? s.biayaLembur ?? 0) || 0;
     
-    totalBiayaLemburDiajukan += costSubmitted;
+    totalBiayaLemburDiajukan += transactionCost;
     countBiayaDiajukan += 1;
 
     if (isApproved) {
-      const jamApprove = Number(s.durasiJamApproved || jam);
-      const costApproved = Number(s.estimasiBiayaApprovedRupiah) || (jamApprove * rate);
-      totalBiayaLemburApproved += costApproved;
+      totalBiayaLemburApproved += transactionCost;
       countBiayaApproved += 1;
-    } else if (isPending) {
-      totalBiayaLemburPending += costSubmitted;
+    } else {
+      totalBiayaLemburPending += transactionCost;
       countBiayaPending += 1;
     }
   });
@@ -554,7 +549,7 @@ export const DashboardPage = ({
       }
 
       const jam = Number(sub.durasiJam) || 0;
-      const biaya = Number(sub.estimasiBiayaRupiah) || (jam * 62500);
+      const biaya = Number(sub.estimasiBiayaRupiah ?? sub.biayaLembur ?? 0) || 0;
 
       if (!categoryMap[key]) {
         categoryMap[key] = { category: key, total_jam: 0, total_biaya: 0, count: 0 };
@@ -2458,7 +2453,7 @@ export const DashboardPage = ({
         </div>
       </div>
 
-      {!isMaker && <GiLocationMap data={mapData} loading={mapLoading} />}
+      {!isMaker && <GiLocationMap data={mapData} loading={mapLoading} selectedUpt={selectedUpt} selectedUltg={selectedUltg} setSelectedUpt={setSelectedUpt} setSelectedUltg={setSelectedUltg} setSelectedGi={setSelectedGi} defaultUpt={navbarScope?.uptName || "Semua UPT"} defaultUltg={navbarScope?.ultgName || "Semua ULTG"} defaultGi={navbarScope?.giName || "Semua GI"} />}
 
       {/* Signature Modal */}
       <SignatureModal

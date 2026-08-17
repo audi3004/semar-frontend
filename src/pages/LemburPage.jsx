@@ -5,6 +5,7 @@ import { api } from "../services/api";
 import { MasterDataService } from "../services/masterDataService";
 import { SignatureModal } from "../components/common/SignatureModal";
 import { DocumentViewerModal } from "../components/common/DocumentViewerModal";
+import { matchesNavbarTransactionFilter } from "../utils/navbarTransactionFilter";
 import { RejectModal } from "../components/common/RejectModal";
 import { RevisionModal } from "../components/common/RevisionModal";
 import { AlertNotificationModal } from "../components/common/AlertNotificationModal";
@@ -148,6 +149,8 @@ const mapApiLembur = (item) => {
       jenisPekerjaan: item.jenis_pekerjaan || legacyCategory.jenisPekerjaan,
    };
    const statusCode = item.status?.kode_status || "DRAFT";
+   const spklCreator = item.spklAssignment?.spkl?.createdBy;
+   const spklCreatorIdentity = spklCreator?.pegawai || spklCreator?.petugas;
    return {
       ...item,
       ...resolveBackendFileFields(item),
@@ -176,8 +179,10 @@ const mapApiLembur = (item) => {
       dasarLemburType: item.dasar_lembur_type,
       dasarReferenceId: item.id_spkl_petugas || item.id_cuti || item.id_ijin || item.id_sakit,
       nomorSpkl: item.spklAssignment?.spkl?.nomor_dokumen || "",
-      pengajuLemburNama: item.petugas?.nama || `Petugas #${item.id_petugas}`,
-      pengajuLemburNip: item.petugas?.nip || "",
+      pembuatSpklNama: spklCreatorIdentity?.nama || spklCreator?.username || "-",
+      pembuatSpklNip: spklCreatorIdentity?.nip || "",
+      pengajuLemburNama: spklCreatorIdentity?.nama || spklCreator?.username || "-",
+      pengajuLemburNip: spklCreatorIdentity?.nip || "",
       kegiatanDetail: item.detail_pekerjaan_lembur || "",
       petugasPendampingNip: item.petugasCuti?.nip || "",
       petugasPendampingNama: item.petugasCuti?.nama || "",
@@ -257,6 +262,9 @@ export const LemburPage = ({
    submissions,
    settings,
    onRefreshData,
+   navbarProjectIds = [],
+   startDate = "",
+   endDate = "",
 }) => {
    const [activeSubTab, setActiveSubTab] = useState("daftar");
    const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -405,7 +413,6 @@ export const LemburPage = ({
    const isOperatorCuti = ["CUTI", "IJIN", "SAKIT"].includes(selectedBasis?.type) || jenisPekerjaan === "Pengganti Piket (Operator sedang cuti)";
    const isSiagaLibur = selectedBasis?.kode_jenis_pekerjaan === "SIAGA_HARI_LIBUR" || jenisPekerjaan === "Siaga / Libur Nasional";
    const areActivityPhotosOptional = ["CUTI", "IJIN", "SAKIT"].includes(selectedBasis?.type) || selectedBasis?.kode_jenis_pekerjaan === "SIAGA_HARI_LIBUR" || isPhotoEvidenceOptional(kategoriLembur, jenisPekerjaan);
-   const isSpecialEightHourOvertime = isOperatorCuti || isSiagaLibur;
    const hourOptions = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
    const handleBasisChange = (key) => {
       setSelectedBasisKey(key); const basis = availableBases.find((item) => `${item.type}:${item.reference_id}` === key);
@@ -511,7 +518,9 @@ export const LemburPage = ({
       "admin",
    ].includes(currentUser?.role);
 
-   const lemburSubmissions = apiLembur;
+   const lemburSubmissions = apiLembur.filter((submission) =>
+      matchesNavbarTransactionFilter(submission, { projectIds: navbarProjectIds, startDate, endDate })
+   );
    const validationSubmissions = [
       ...(submissions || []).filter((item) => item.type !== "lembur"),
       ...apiLembur,
@@ -2532,7 +2541,8 @@ export const LemburPage = ({
                         </div>
                      )}
 
-                     {/* Upload Lampiran Dokumentasi & Dasar Perintah */}
+                     {/* Seluruh bukti upload hanya berlaku untuk pekerjaan lembur reguler. */}
+                     {!areActivityPhotosOptional && (
                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                         <p className="font-bold text-slate-800 flex items-center gap-1.5 text-xs border-b border-slate-200 pb-1.5">
                            <Upload className="w-4 h-4 text-sky-600" /> Upload
@@ -2540,8 +2550,7 @@ export const LemburPage = ({
                         </p>
 
                         {/* Task 2: Jika Kategori Pekerjaan selain Piket Tanggal Merah / Cuti Pengganti, tampilkan Foto 1 dan Foto 2 (Wajib Diisi) */}
-                        {!areActivityPhotosOptional && (
-                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2 border-b border-slate-200">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2 border-b border-slate-200">
                               {/* Foto 1 */}
                               <div>
                                  <label className="block font-semibold text-slate-700 text-[11px] mb-1">
@@ -2635,14 +2644,13 @@ export const LemburPage = ({
                                     </label>
                                  )}
                               </div>
-                           </div>
-                        )}
+                        </div>
 
                         {/* File Dasar Perintah Lembur hanya untuk pekerjaan reguler */}
-                        {!isSpecialEightHourOvertime && <div>
+                        <div>
                            <label className="block font-semibold text-slate-700 text-[11px] mb-1">
                               File Dasar Perintah Lembur (ST / Nota / Surat
-                              Dinas) {!areActivityPhotosOptional && <span className="text-rose-500">*</span>}
+                              Dinas) <span className="text-rose-500">*</span>
                            </label>
                            {dasarPerintahLemburUrl ? (
                               <div className="p-2.5 bg-sky-50 border border-sky-300 rounded-xl flex items-center justify-between">
@@ -2685,8 +2693,9 @@ export const LemburPage = ({
                                  />
                               </label>
                            )}
-                        </div>}
+                        </div>
                      </div>
+                     )}
 
                      <div>
                         <label className="block font-bold mb-1 text-slate-800">

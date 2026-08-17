@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import QRCode from "qrcode";
 import { QrCode } from "lucide-react";
-import plnLogo from "../../assets/plnes-logo.png";
+import { PLN_LOGO_PNG_BASE64 } from "../../assets/plnLogoBase64";
 import semarLogoDefault from "../../assets/logo_semar_trns.png";
 import {
    formatDateIndonesianLong,
@@ -9,6 +9,9 @@ import {
    getFormattedDocNo,
 } from "../../utils/formatters";
 import { DataService } from "../../services/dataService";
+import { DOCUMENT_LETTERHEAD } from "../pdf/documentLetterhead";
+
+const plnLogo = PLN_LOGO_PNG_BASE64;
 
 export const ReportDocument = ({
    currentDateStr = new Date().toLocaleDateString("id-ID"),
@@ -82,31 +85,35 @@ export const ReportDocument = ({
       `}</style>
 
          {/* HEADER DOKUMEN (Statis di Media Cetak) */}
-         <header className="print-header-fixed mb-4">
-            <div className="flex justify-between items-center border-b-2 border-black pb-2">
-               <div className="flex flex-col items-start gap-1">
+         <header className="print-header-fixed mb-5 bg-white">
+            <div className="relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b-2 border-[#075369] pb-3.5">
+               <div className="absolute bottom-0 left-0 h-0.5 w-24 bg-[#00A2B8]" />
+               <div className="flex items-center gap-3.5 min-w-0">
                   <img
                      src={plnLogo}
                      alt="PLN Logo"
-                     className="h-3 w-auto object-contain flex-shrink-0"
+                     className="block h-9 sm:h-10 w-auto max-w-[180px] object-contain flex-shrink-0"
                      referrerPolicy="no-referrer"
                   />
-                  <div>
-                     <p className="text-[8px] font-bold text-black uppercase">
-                        Unit Pelaksana 2 - Jawa Tengah &amp; DI Yogyakarta
+                  <div className="min-w-0 border-l border-slate-300 pl-3.5">
+                     <p className="text-[9px] sm:text-[10px] leading-tight font-extrabold text-[#075369] uppercase tracking-[0.04em]">
+                        {DOCUMENT_LETTERHEAD.unitName}
                      </p>
-                     <p className="text-[8px] text-black font-medium">
-                        Wilayah Kerja Unit Transmisi Jawa Bagian Tengah
+                     <p className="mt-1 text-[8px] sm:text-[9px] leading-tight text-slate-600 font-medium">
+                        {DOCUMENT_LETTERHEAD.territoryName}
                      </p>
                   </div>
                </div>
-               <div className="text-right">
-                  <h1 className="text-base font-bold uppercase tracking-tight">
+               <div className="w-full sm:w-auto text-left sm:text-right text-[10px] text-slate-700 sm:border-l sm:border-[#00A2B8] sm:pl-4">
+                  <h1 className="font-extrabold text-[#075369] uppercase tracking-[0.06em]">
                      {title}
                   </h1>
-                  <span className="text-xs font-mono font-semibold">
+                  <p className="mt-1 font-mono text-slate-900 font-bold break-all sm:whitespace-nowrap">
                      {docNoStr}
-                  </span>
+                  </p>
+                  <p className="mt-0.5 text-[9px] text-slate-600">
+                     Tgl Cetak: {currentDateStr}
+                  </p>
                </div>
             </div>
          </header>
@@ -243,8 +250,9 @@ export const ReportDocument = ({
                      filterInfo.unit || filterInfo.unitUpt,
                   );
 
-               let rawSigs =
-                  Array.isArray(signatories) && signatories.length > 0
+               let rawSigs = filterInfo.strictSignatories
+                  ? (Array.isArray(signatories) ? signatories : [])
+                  : Array.isArray(signatories) && signatories.length > 0
                      ? signatories
                      : defaultSignatories;
                if (
@@ -266,7 +274,7 @@ export const ReportDocument = ({
                const hasAnyData = rawSigs.some(
                   (s) => s && (s.name || s.nip || s.title || s.role),
                );
-               if (!hasAnyData) {
+               if (!hasAnyData && !filterInfo.strictSignatories) {
                   rawSigs = defaultSignatories;
                }
 
@@ -298,7 +306,17 @@ export const ReportDocument = ({
                                  sig.positionLabel ||
                                  `Penandatangan ${idx + 1}`}
                            </span>
-                           <div className="my-1 border-b border-black w-24"></div>
+                           <div className="my-1 h-10 w-full flex items-center justify-center">
+                              {sig.signatureUrl || sig.signature ? (
+                                 <img
+                                    src={sig.signatureUrl || sig.signature}
+                                    alt={`Tanda tangan ${sig.name || sig.role || idx + 1}`}
+                                    className="max-h-10 max-w-32 object-contain mix-blend-multiply"
+                                 />
+                              ) : (
+                                 <span className="text-[9px] text-slate-500 italic">Belum ditandatangani</span>
+                              )}
+                           </div>
                            <div>
                               <p className="font-bold underline">
                                  {sig.name || "(.........................)"}

@@ -34,10 +34,32 @@ import { LoadingSkeleton } from "../components/common/LoadingSkeleton";
 import { motion, AnimatePresence } from "motion/react";
 import { api } from "../services/api";
 import { mapWorkflowSubmission } from "../utils/workflowSubmissionMapper";
+import { matchesNavbarTransactionFilter } from "../utils/navbarTransactionFilter";
 
 const DEFAULT_SIGNATORIES = DataService.getDefaultReportSignatories("UPT Semarang");
 
-export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
+const isReplacementOvertime = (submission) => {
+  if (submission?.type !== "lembur") return false;
+  const text = [submission.kategoriLembur, submission.jenisPekerjaan, submission.dasarLemburType, submission.keterangan]
+    .filter(Boolean).join(" ").toUpperCase();
+  return ["CUTI", "IJIN", "IZIN", "SAKIT"].some((keyword) => text.includes(keyword))
+    && (text.includes("PENGGANTI") || ["CUTI", "IJIN", "IZIN", "SAKIT"].includes(String(submission.dasarLemburType || "").toUpperCase()));
+};
+
+export const ReportPermohonanPage = ({
+  currentUser,
+  submissions = [],
+  navbarProjectIds = [],
+  selectedProject = "Semua Project",
+  startDate = "",
+  endDate = "",
+  setStartDate = () => {},
+  setEndDate = () => {},
+  selectedUpt = "Semua UPT",
+  selectedUltg = "Semua ULTG",
+  selectedGi = "Semua GI",
+  onSelectGi = () => {}
+}) => {
   const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
   const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   const [selectedType, setSelectedType] = useState("all");
@@ -53,6 +75,42 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   const [reportUnits, setReportUnits] = useState([]);
   const [reportDocument, setReportDocument] = useState(null);
   const [isSignatureOpen, setIsSignatureOpen] = useState(false);
+  const jabatanName = String(currentUser?.jabatan?.nama_jabatan || currentUser?.nama_jabatan || currentUser?.jabatan || "");
+  const isPlnEsEmployee = /(PLN\s*ES|ELECTRICITY\s+SERVICES)/i.test(jabatanName);
+  const [reportView, setReportView] = useState(() => (/(PLN\s*ES|ELECTRICITY\s+SERVICES)/i.test(jabatanName) ? "PLN_ES" : "PLN"));
+  const isPlnEsView = reportView === "PLN_ES";
+  const isPlnMonitoringView = isPlnEsEmployee && reportView === "PLN";
+
+  useEffect(() => {
+    setReportView(isPlnEsEmployee ? "PLN_ES" : "PLN");
+  }, [isPlnEsEmployee]);
+
+  const applyMonthToNavbar = (month, year) => {
+    const numericMonth = Number(month);
+    const numericYear = Number(year);
+    if (!numericMonth || !numericYear) return;
+    const pad = (value) => String(value).padStart(2, "0");
+    const lastDay = new Date(numericYear, numericMonth, 0).getDate();
+    setStartDate(`${numericYear}-${pad(numericMonth)}-01`);
+    setEndDate(`${numericYear}-${pad(numericMonth)}-${pad(lastDay)}`);
+  };
+
+  const handleMonthChange = (month) => {
+    setSelectedMonth(month);
+    applyMonthToNavbar(month, selectedYear);
+  };
+
+  const handleYearChange = (year) => {
+    setSelectedYear(year);
+    applyMonthToNavbar(selectedMonth, year);
+  };
+
+  useEffect(() => {
+    const sourceDate = startDate || endDate;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sourceDate)) return;
+    setSelectedYear(sourceDate.slice(0, 4));
+    setSelectedMonth(String(Number(sourceDate.slice(5, 7))));
+  }, [startDate, endDate]);
   const normalizedRole = String(currentUser?.kode_role || currentUser?.role || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const isChecker = normalizedRole === "CHECKER";
   const isApproval1 = ["APPROVAL1", "APPROVED1"].includes(normalizedRole);
@@ -78,6 +136,8 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
           type: selectedType,
           id_unit: selectedUnit !== "all" ? Number(selectedUnit) : undefined,
           search: searchQuery.trim() || undefined,
+          id_project: navbarProjectIds.length === 1 ? navbarProjectIds[0] : undefined,
+          view: reportView,
         };
         const result = await api.getReportPermohonan(params);
         if (!active) return;
@@ -98,11 +158,21 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
       active = false;
       clearTimeout(timeout);
     };
-  }, [currentUser, selectedMonth, selectedYear, selectedType, selectedUnit, searchQuery]);
+  }, [currentUser, selectedMonth, selectedYear, selectedType, selectedUnit, searchQuery, navbarProjectIds.join(","), reportView]);
 
   useEffect(() => {
     if (selectedUnit === "all" && reportUnits.length === 1) setSelectedUnit(String(reportUnits[0].id_unit));
   }, [reportUnits, selectedUnit]);
+
+  useEffect(() => {
+    if (!reportUnits.length) return;
+    if (!selectedGi || selectedGi === "Semua GI") {
+      setSelectedUnit("all");
+      return;
+    }
+    const unit = reportUnits.find((item) => item.nama_unit === selectedGi);
+    if (unit) setSelectedUnit(String(unit.id_unit));
+  }, [selectedGi, reportUnits]);
 
   // Auto increment sequence for document number (001, 002, ...)
   const [docSeq, setDocSeq] = useState(() => {
@@ -273,16 +343,27 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   if (!currentUser) return <LoadingSkeleton variant="dashboard" />;
 
   // Filter ONLY submissions with status APPROVED / approved (Completed Approval 3)
-  const approved3Submissions = useMemo(() => {
+  const visibleByReportMode = useMemo(() => {
+    if (isPlnEsView) return reportSubmissions;
     return reportSubmissions.filter((sub) => {
       const s = sub.status ? sub.status.toUpperCase() : "";
       return s === "APPROVED";
     });
-  }, [reportSubmissions]);
+  }, [reportSubmissions, isPlnEsView]);
 
   // Apply User Filters
   const filteredSubmissions = useMemo(() => {
-    return approved3Submissions.filter((sub) => {
+    return visibleByReportMode.filter((sub) => {
+      if (!matchesNavbarTransactionFilter(sub, { projectIds: navbarProjectIds, startDate, endDate })) return false;
+      const hierarchyNames = [
+        sub.unitUpt,
+        sub.unitUltg,
+        sub.garduInduk,
+        ...(sub.unitHierarchy || []).map((unit) => unit.name)
+      ].filter(Boolean);
+      if (selectedUpt !== "Semua UPT" && !hierarchyNames.includes(selectedUpt)) return false;
+      if (selectedUltg !== "Semua ULTG" && !hierarchyNames.includes(selectedUltg)) return false;
+      if (selectedGi !== "Semua GI" && !hierarchyNames.includes(selectedGi)) return false;
       // Month & Year Filter based on tanggalPengajuan / tanggalLembur / tanggalMulai
       const dateStr = sub.tanggalPengajuan || sub.tanggalLembur || sub.tanggalMulai;
       if (dateStr) {
@@ -341,7 +422,10 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
 
       return true;
     });
-  }, [approved3Submissions, selectedMonth, selectedYear, selectedType, selectedUnit, searchQuery]);
+  }, [visibleByReportMode, selectedMonth, selectedYear, selectedType, selectedUnit, searchQuery, navbarProjectIds, startDate, endDate, selectedUpt, selectedUltg, selectedGi]);
+
+  // Satu sumber data untuk grid, preview ReportDocument, dan file hasil ekspor.
+  const reportOutputSubmissions = filteredSubmissions;
 
   // Metrics Calculation
   const metrics = useMemo(() => {
@@ -407,13 +491,15 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
 
   const filterInfo = {
     periode: `${monthNames.find((m) => m.value === selectedMonth)?.label} ${selectedYear}`,
+    project: selectedProject,
     type: selectedType === "all" ? "Semua Jenis" : selectedType,
     unit: effectiveUnit,
     unitUpt: currentUser?.unitUpt || effectiveUnit,
     selectedMonth,
     selectedYear,
     docSeq,
-    summary: reportSummary
+    summary: reportSummary,
+    reportView
   };
 
   const reportSignatories = reportDocument ? [
@@ -445,6 +531,10 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   }, [selectedMonth, selectedYear]);
 
   const handleOpenExportModal = (format) => {
+    if (isPlnEsView) {
+      handleExecuteExport(format);
+      return;
+    }
     if (!isPeriodCompleted) {
       setSuccessNotification(
         "Generate PDF Laporan hanya dapat dilakukan untuk periode yang telah selesai (bulan/tahun yang sudah berlalu). Periode yang sedang berlangsung tidak dapat di-generate."
@@ -460,11 +550,15 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   };
 
   const handleCreateReport = async () => {
-    if (!isChecker || selectedUnit === "all") return;
+    if (!isChecker || isPlnMonitoringView || selectedUnit === "all") return;
+    if (navbarProjectIds.length !== 1) {
+      setReportError("Pilih tepat satu Project pada filter Navbar sebelum menginisiasi report.");
+      return;
+    }
     setIsExporting(true);
     setReportError("");
     try {
-      const report = await api.createReportPermohonan({ year: Number(selectedYear), month: Number(selectedMonth), id_unit: Number(selectedUnit) });
+      const report = await api.createReportPermohonan({ year: Number(selectedYear), month: Number(selectedMonth), id_unit: Number(selectedUnit), id_project: navbarProjectIds[0] });
       setReportDocument(report);
       setSuccessNotification(`Report ${report.nomor_dokumen} berhasil dibuat. Silakan bubuhkan tanda tangan Checker.`);
     } catch (error) {
@@ -540,13 +634,23 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
   const handleExecuteExport = async (requestedFormat = exportFormat) => {
     setIsExporting(true);
     try {
+      if (isPlnEsView) {
+        const directFilterInfo = { ...filterInfo, nomorDokumen: "REPORT-PLN-ES", reportLabel: "PLN ES", hideSignatories: true };
+        if (requestedFormat === "pdf") {
+          await PdfService.downloadReportPdf(filteredSubmissions, directFilterInfo, []);
+        } else {
+          ExportService.exportReportToExcel(filteredSubmissions, directFilterInfo, [], `Report_Permohonan_PLN_ES_${selectedYear}-${String(selectedMonth).padStart(2, "0")}.xlsx`);
+        }
+        setSuccessNotification(`Report PLN ES berhasil diekspor ke ${requestedFormat.toUpperCase()}.`);
+        setTimeout(() => setSuccessNotification(null), 5000);
+        return;
+      }
       const exportReport = await api.getReportPermohonanExport(reportDocument.id_report_permohonan);
-      const exportSubmissions = (exportReport.snapshot?.transactions || []).map(mapWorkflowSubmission);
       const currentFilterInfo = { ...filterInfo, docSeq: exportReport.nomor_urut, nomorDokumen: exportReport.nomor_dokumen };
       if (requestedFormat === "pdf") {
-        await PdfService.downloadReportPdf(exportSubmissions, currentFilterInfo, reportSignatories);
+        await PdfService.downloadReportPdf(reportOutputSubmissions, currentFilterInfo, reportSignatories);
       } else {
-        ExportService.exportReportToExcel(exportSubmissions, currentFilterInfo, reportSignatories, `Report_Permohonan_${exportReport.nomor_dokumen.replace(/\//g, "-")}.xlsx`);
+        ExportService.exportReportToExcel(reportOutputSubmissions, currentFilterInfo, reportSignatories, `Report_Permohonan_${exportReport.nomor_dokumen.replace(/\//g, "-")}.xlsx`);
       }
       setSuccessNotification(`Dokumen ${exportReport.nomor_dokumen} berhasil diekspor ke ${requestedFormat.toUpperCase()}.`);
       setTimeout(() => setSuccessNotification(null), 5000);
@@ -609,38 +713,43 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
 
         {/* Generate Export Buttons */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto shrink-0">
-          {!isPeriodCompleted && (
+          {!isPlnEsView && !isPeriodCompleted && (
             <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200/80 flex items-center justify-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <span>Periode Sedang Berlangsung</span>
             </span>
           )}
-          {isChecker && isPeriodCompleted && !reportDocument && (
+          {!isPlnEsView && !isPlnMonitoringView && isChecker && isPeriodCompleted && !reportDocument && (
             <button onClick={handleCreateReport} disabled={isExporting || selectedUnit === "all"} className="flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md transition cursor-pointer disabled:opacity-50">
               <FileText className="w-4 h-4" /><span>Buat Nomor Report</span>
             </button>
           )}
-          {reportDocument && ((isChecker && !reportDocument.checker_signature) || (isApproval1 && reportDocument.checker_signature && !reportDocument.approval_1_signature)) && (
+          {!isPlnMonitoringView && reportDocument && ((isChecker && !reportDocument.checker_signature) || (isApproval1 && reportDocument.checker_signature && !reportDocument.approval_1_signature)) && (
             <button onClick={() => setIsSignatureOpen(true)} className="flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
               <PenTool className="w-4 h-4" /><span>Tanda Tangani Report</span>
             </button>
           )}
-          {reportDocument && isApproval1 && !reportDocument.checker_signature && (
+          {!isPlnMonitoringView && reportDocument && isApproval1 && !reportDocument.checker_signature && (
             <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-3 py-2 rounded-xl border border-amber-200">Menunggu tanda tangan Checker</span>
           )}
-          <button onClick={() => handleOpenExportModal("excel")} disabled={isExporting || !reportDocument?.fully_signed} className="flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+          {!isPlnEsView && (
+            <button onClick={handleOpenPreviewModal} disabled={isLoadingReport} className="flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs bg-white hover:bg-sky-50 text-sky-700 border border-sky-200 rounded-xl transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50">
+              <Eye className="w-4 h-4" /><span>Preview PDF</span>
+            </button>
+          )}
+          <button onClick={() => handleOpenExportModal("excel")} disabled={isExporting || (!isPlnEsView && !reportDocument?.fully_signed)} className="flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
             <FileSpreadsheet className="w-4 h-4" /><span>Export Excel (.xlsx)</span>
           </button>
           <button
             onClick={() => handleOpenExportModal("pdf")}
-            disabled={isExporting || isLoadingReport || !reportDocument?.fully_signed}
+            disabled={isExporting || isLoadingReport || (!isPlnEsView && !reportDocument?.fully_signed)}
             title={
-              !reportDocument?.fully_signed
+              !isPlnEsView && !reportDocument?.fully_signed
                 ? "Generate PDF hanya dapat dilakukan untuk periode yang sudah selesai"
                 : "Generate PDF Laporan"
             }
             className={`flex-1 md:flex-none px-4 py-2.5 min-h-[42px] font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50 ${
-              !reportDocument?.fully_signed
+              !isPlnEsView && !reportDocument?.fully_signed
                 ? "bg-slate-200 text-slate-400 border border-slate-300 shadow-none cursor-not-allowed"
                 : "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20 cursor-pointer"
             }`}
@@ -649,6 +758,28 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
             <span>Export PDF (.pdf)</span>
           </button>
         </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-2 flex items-center gap-2">
+        {isPlnEsEmployee && (
+          <button
+            type="button"
+            onClick={() => setReportView("PLN_ES")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${isPlnEsView ? "bg-emerald-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}
+          >
+            Report PLN ES
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setReportView("PLN")}
+          className={`px-4 py-2.5 rounded-xl text-xs font-black transition ${isPlnEsEmployee ? "cursor-pointer" : "cursor-default"} ${!isPlnEsView ? "bg-sky-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}
+        >
+          Report PLN {isPlnEsEmployee ? "(Monitoring Tanda Tangan)" : ""}
+        </button>
+        <span className="ml-auto hidden md:block text-[11px] font-semibold text-slate-500 px-3">
+          {isPlnEsView ? "Seluruh transaksi dapat dilihat dan diekspor langsung" : "Lembur pengganti piket tidak disertakan"}
+        </span>
       </div>
 
       {/* Metrics Summary Grid */}
@@ -725,7 +856,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
             <label className="block font-bold text-slate-700 mb-1">Bulan Pengajuan</label>
             <select
               value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
+              onChange={(e) => handleMonthChange(e.target.value)}
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer"
             >
               {monthNames.map((m) => (
@@ -741,7 +872,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
             <label className="block font-bold text-slate-700 mb-1">Tahun</label>
             <select
               value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
+              onChange={(e) => handleYearChange(e.target.value)}
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer"
             >
               {Array.from({ length: 6 }, (_, index) => String(new Date().getFullYear() - index)).map((year) => <option key={year} value={year}>{year}</option>)}
@@ -770,7 +901,12 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
             <label className="block font-bold text-slate-700 mb-1">Gardu Induk (GI)</label>
             <select
               value={selectedUnit}
-              onChange={(e) => setSelectedUnit(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSelectedUnit(value);
+                const unit = reportUnits.find((item) => String(item.id_unit) === value);
+                onSelectGi(unit?.nama_unit || "");
+              }}
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer"
             >
               <option value="all">-- Pilih GI --</option>
@@ -832,11 +968,11 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-emerald-600" />
             <h3 className="font-bold text-sm text-slate-900">
-              Daftar Permohonan Disetujui ({filteredSubmissions.length}) berkas
+              {isPlnEsView ? "Daftar Seluruh Permohonan PLN ES" : "Daftar Permohonan PLN Disetujui"} ({filteredSubmissions.length}) berkas
             </h3>
           </div>
           <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-            Dokumen Resmi Terverifikasi
+            {isPlnEsView ? "Tanpa Pembatasan Status" : "Dokumen Resmi Terverifikasi"}
           </span>
         </div>
 
@@ -847,6 +983,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
                 <th className="py-3 px-4 w-12 text-center">No</th>
                 <th className="py-3 px-4">No. Dokumen</th>
                 <th className="py-3 px-4">Jenis</th>
+                {isPlnEsView && <th className="py-3 px-4">Klasifikasi Lembur</th>}
                 <th className="py-3 px-4">Pemohon</th>
                 <th className="py-3 px-4">Unit / ULTG</th>
                 <th className="py-3 px-4">Tanggal</th>
@@ -859,15 +996,15 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
             <tbody className="divide-y divide-slate-100 font-medium">
               {isLoadingReport ? (
                 <tr>
-                  <td colSpan={9} className="p-10 text-center text-slate-500 font-bold">
+                  <td colSpan={isPlnEsView ? 11 : 10} className="p-10 text-center text-slate-500 font-bold">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-600" />
                     Mengambil report dari server...
                   </td>
                 </tr>
               ) : filteredSubmissions.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400 text-xs">
-                    <p className="font-bold text-slate-600 mb-1">Tidak ada dokumen yang telah di Setujui</p>
+                  <td colSpan={isPlnEsView ? 11 : 10} className="py-12 text-center text-slate-400 text-xs">
+                    <p className="font-bold text-slate-600 mb-1">Tidak ada dokumen pada filter terpilih</p>
                     <p>Tidak ditemukan data permohonan yang sesuai dengan filter pilihan Anda.</p>
                   </td>
                 </tr>
@@ -893,6 +1030,15 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
                           {sub.type}
                         </span>
                       </td>
+                      {isPlnEsView && (
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {sub.type === "lembur" ? (
+                            <span className={`inline-flex px-2.5 py-1 rounded-full border text-[10px] font-black ${isReplacementOvertime(sub) ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-sky-50 text-sky-700 border-sky-200"}`}>
+                              {isReplacementOvertime(sub) ? "Pengganti Piket (Cuti/Ijin/Sakit)" : "Lembur Operasional"}
+                            </span>
+                          ) : <span className="text-slate-400">-</span>}
+                        </td>
+                      )}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <p className="font-bold text-slate-900">{sub.employeeName}</p>
                         <p className="text-[10px] text-slate-500 font-mono">{sub.employeeNip}</p>
@@ -909,13 +1055,13 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
                       <td className="py-3.5 px-4 text-right font-black text-slate-900 whitespace-nowrap font-mono">
                         {nominal}
                       </td>
-                      {!isApproval2 && <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          <CheckCircle className="w-3 h-3 text-emerald-600" />
-                          Approved 3
-                        </span>
-                      </td>}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold border ${sub.status === "approved" ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-amber-50 text-amber-800 border-amber-200"}`}>
+                          {sub.status === "approved" && <CheckCircle className="w-3 h-3 text-emerald-600" />}
+                          {getStatusLabel(sub.status)}
+                        </span>
+                      </td>
+                      {!isApproval2 && <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <button
                           onClick={() => setSelectedDocSub(sub)}
                           className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] rounded-xl shadow-2xs cursor-pointer transition inline-flex items-center gap-1.5"
@@ -923,7 +1069,7 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
                           <Eye className="w-3.5 h-3.5 text-sky-400" />
                           <span>Pratinjau</span>
                         </button>
-                      </td>
+                      </td>}
                     </tr>
                   );
                 })
@@ -1141,10 +1287,17 @@ export const ReportPermohonanPage = ({ currentUser, submissions = [] }) => {
         isOpen={isPreviewReportModalOpen}
         onClose={handleClosePreviewModal}
         isReport={true}
-        reportSubmissions={filteredSubmissions}
-        reportFilterInfo={{ ...filterInfo, docSeq }}
+        reportSubmissions={reportOutputSubmissions}
+        reportFilterInfo={{
+          ...filterInfo,
+          docSeq: reportDocument?.nomor_urut || docSeq,
+          nomorDokumen: reportDocument?.nomor_dokumen || "DRAFT REPORT",
+          reportLabel: "LAPORAN PERMOHONAN PLN",
+          strictSignatories: true
+        }}
         reportSignatories={reportSignatories}
         isPeriodCompleted={isPeriodCompleted}
+        canDownloadReport={isPlnEsView || Boolean(reportDocument?.fully_signed)}
       />
 
       {/* Official Document Preview Modal */}

@@ -988,6 +988,25 @@ export const SubmissionPdfDocument = ({
                </View>
             </View>
 
+            {submission.type === "lembur" && (
+               <View style={styles.detailBox}>
+                  <Text style={styles.boxTitle}>DASAR LEMBUR</Text>
+                  <View style={styles.detailGrid}>
+                     <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Nomor SPKL:</Text>
+                        <Text style={styles.detailValue}>{submission.nomorSpkl || "-"}</Text>
+                     </View>
+                     <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Pemberi Perintah (Checker):</Text>
+                        <Text style={styles.detailValue}>
+                           {submission.pembuatSpklNip ? `${submission.pembuatSpklNip} - ` : ""}
+                           {submission.pembuatSpklNama || "-"}
+                        </Text>
+                     </View>
+                  </View>
+               </View>
+            )}
+
             {/* 4. DETAIL PENGAJUAN */}
             <View style={styles.detailBox}>
                <Text style={styles.boxTitle}>DETAIL DOKUMEN PENGAJUAN</Text>

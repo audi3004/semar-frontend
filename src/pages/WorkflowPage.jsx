@@ -177,10 +177,8 @@ const mapSppdExpensesPayload = (expenses = []) => {
 
 const mapCheckerEditPayload = (type, data) => {
   if (type === "lembur") return {
-    tgl_lembur: data.tanggalLembur, jam_mulai: data.jamMulai, jam_selesai: data.jamSelesai,
-    kategori_lembur: data.kategoriLembur, jenis_pekerjaan: data.jenisPekerjaan,
-    detail_pekerjaan_lembur: data.detailKegiatan, jumlah_jam_koreksi: data.jumlahJamKoreksi,
-    catatan_koreksi: data.catatanKoreksi, keterangan: data.keterangan
+    jumlah_jam_koreksi: data.jumlahJamKoreksi,
+    catatan_koreksi: data.catatanKoreksi
   };
   if (type === "cuti") return {
     jenis_cuti: data.cutiType, tgl_mulai: data.tanggalMulai, tgl_selesai: data.tanggalSelesai,
@@ -2736,16 +2734,16 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                     <input
                       type="date"
                       value={checkerLemburTanggalLembur}
-                      onChange={(e) => setCheckerLemburTanggalLembur(e.target.value)}
-                      className="w-full h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                      readOnly
+                      className="w-full h-9 px-2 bg-slate-100 border border-slate-300 rounded-lg text-xs text-slate-600 cursor-not-allowed"
                     />
                   </div>
                   <div>
                     <label className="block font-bold text-slate-800 mb-1">Kategori Lembur</label>
                     <select
                       value={checkerLemburKategoriLembur}
-                      onChange={(e) => setCheckerLemburKategoriLembur(e.target.value)}
-                      className="w-full h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                      disabled
+                      className="w-full h-9 px-2 bg-slate-100 border border-slate-300 rounded-lg text-xs text-slate-600 cursor-not-allowed"
                     >
                       <option value="Terencana">Terencana</option>
                       <option value="Darurat">Darurat</option>
@@ -2759,8 +2757,8 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                     <input
                       type="time"
                       value={checkerLemburJamMulai}
-                      onChange={(e) => setCheckerLemburJamMulai(e.target.value)}
-                      className="w-full h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                      readOnly
+                      className="w-full h-9 px-2 bg-slate-100 border border-slate-300 rounded-lg text-xs text-slate-600 cursor-not-allowed"
                     />
                   </div>
                   <div>
@@ -2768,8 +2766,8 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                     <input
                       type="time"
                       value={checkerLemburJamSelesai}
-                      onChange={(e) => setCheckerLemburJamSelesai(e.target.value)}
-                      className="w-full h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                      readOnly
+                      className="w-full h-9 px-2 bg-slate-100 border border-slate-300 rounded-lg text-xs text-slate-600 cursor-not-allowed"
                     />
                   </div>
                 </div>
@@ -2781,11 +2779,11 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                     </label>
                     <input
                       type="number"
-                      step="0.5"
-                      min="0.5"
+                      step="1"
+                      min="1"
                       max="24"
                       value={jumlahJamKoreksiInput}
-                      onChange={(e) => setJumlahJamKoreksiInput(e.target.value)}
+                      onChange={(e) => setJumlahJamKoreksiInput(e.target.value.replace(/\D/g, ""))}
                       className="w-full h-9 px-2 bg-white border-2 border-sky-400 rounded-lg font-mono font-black text-xs text-slate-900 focus:outline-none"
                     />
                   </div>
@@ -2807,8 +2805,8 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                   <input
                     type="text"
                     value={checkerLemburJenisPekerjaan}
-                    onChange={(e) => setCheckerLemburJenisPekerjaan(e.target.value)}
-                    className="w-full h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                    readOnly
+                    className="w-full h-9 px-2 bg-slate-100 border border-slate-300 rounded-lg text-xs text-slate-600 cursor-not-allowed"
                     placeholder="Contoh: Pemeliharaan Jaringan SUTM"
                   />
                 </div>
@@ -2818,8 +2816,8 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                   <input
                     type="text"
                     value={checkerLemburDetailKegiatan}
-                    onChange={(e) => setCheckerLemburDetailKegiatan(e.target.value)}
-                    className="w-full h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                    readOnly
+                    className="w-full h-9 px-2 bg-slate-100 border border-slate-300 rounded-lg text-xs text-slate-600 cursor-not-allowed"
                     placeholder="Masukkan rincian kegiatan..."
                   />
                 </div>
