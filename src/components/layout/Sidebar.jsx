@@ -41,7 +41,7 @@ export const Sidebar = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const isMaker = currentUser?.role === "maker";
+  const canAccessMakerTransactions = ["maker", "superadmin"].includes(currentUser?.role);
   const [permissions, setPermissions] = useState(() => ResponsibilityService.getPermissions());
 
   useEffect(() => {
@@ -99,7 +99,7 @@ export const Sidebar = ({
   });
 
   const handleTabClick = (id) => {
-    if (!isMaker && ["lembur", "cuti", "ijin", "sakit", "sppd"].includes(id)) {
+    if (!canAccessMakerTransactions && ["lembur", "cuti", "ijin", "sakit", "sppd"].includes(id)) {
       const routeMap = {
         checker: "/workflow/checker",
         verification: "/workflow/verification",

@@ -123,6 +123,8 @@ const SIGNATURE_FIELDS = {
   approved3: "approval_3_signature"
 };
 
+const BULK_APPROVAL_ROLES = ["approved1", "approved2", "approved3"];
+
 const buildApprovalPayload = (dataUrl, role, extra = {}) => {
   const form = new FormData();
   const signatureField = SIGNATURE_FIELDS[role];
@@ -1364,10 +1366,10 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
 
     try {
       if (isBulkApproval) {
-        const selectedTransactions = approval1SelectableSubmissions
+        const selectedTransactions = bulkSelectableSubmissions
           .filter((sub) => selectedApprovalKeys.includes(`${sub.type}:${sub.id}`))
           .map((sub) => ({ type: sub.type, id: sub.id }));
-        const payload = buildApprovalPayload(dataUrl, "approved1");
+        const payload = buildApprovalPayload(dataUrl, effectiveRole);
         payload.append("transactions", JSON.stringify(selectedTransactions));
         await api.bulkApproveWorkflow(payload);
         setIsApproveSignOpen(false);
@@ -1461,11 +1463,15 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
     return sub.currentApproverRole === currentUser.role;
   };
 
-  const approval1SelectableSubmissions = filteredSubmissions.filter(
-    (sub) => currentUser.role === "approved1" && sub.currentApproverRole === "approved1" && canUserApprove(sub)
+  const isBulkApprover = BULK_APPROVAL_ROLES.includes(currentUser?.role);
+  const bulkSelectableSubmissions = filteredSubmissions.filter((sub) =>
+    isBulkApprover
+    && sub.currentApproverRole === currentUser.role
+    && canUserApprove(sub)
+    && !(currentUser.role === "approved2" && sub.type === "sppd")
   );
-  const selectableApprovalKeys = approval1SelectableSubmissions.map((sub) => `${sub.type}:${sub.id}`);
-  const isAllApproval1Selected = selectableApprovalKeys.length > 0
+  const selectableApprovalKeys = bulkSelectableSubmissions.map((sub) => `${sub.type}:${sub.id}`);
+  const isAllBulkSelected = selectableApprovalKeys.length > 0
     && selectableApprovalKeys.every((key) => selectedApprovalKeys.includes(key));
 
   useEffect(() => {
@@ -1479,13 +1485,14 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
       : [...previous, key]);
   };
 
-  const toggleSelectAllApproval1 = () => {
-    setSelectedApprovalKeys(isAllApproval1Selected ? [] : selectableApprovalKeys);
+  const toggleSelectAllBulk = () => {
+    setSelectedApprovalKeys(isAllBulkSelected ? [] : selectableApprovalKeys);
   };
 
-  const handleOpenBulkApproval = () => {
-    if (selectedApprovalKeys.length === 0) return;
-    setApproveSub({ currentApproverRole: "approved1" });
+  const handleOpenBulkApproval = (keys = selectedApprovalKeys) => {
+    if (keys.length === 0) return;
+    setSelectedApprovalKeys(keys);
+    setApproveSub({ currentApproverRole: currentUser.role });
     setIsBulkApproval(true);
     setIsApproveSignOpen(true);
   };
@@ -1906,20 +1913,20 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
           </div>
         </div>
 
-        {currentUser.role === "approved1" && approval1SelectableSubmissions.length > 0 && (
+        {isBulkApprover && bulkSelectableSubmissions.length > 0 && (
           <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 sm:flex-row sm:items-center sm:justify-between">
             <label className="flex cursor-pointer items-center gap-2 text-xs font-extrabold text-emerald-950">
               <input
                 type="checkbox"
-                checked={isAllApproval1Selected}
-                onChange={toggleSelectAllApproval1}
+                checked={isAllBulkSelected}
+                onChange={toggleSelectAllBulk}
                 className="h-4 w-4 rounded border-emerald-300 accent-emerald-600"
               />
-              Pilih semua transaksi yang tampil ({approval1SelectableSubmissions.length})
+              Pilih semua transaksi yang dapat disetujui ({bulkSelectableSubmissions.length})
             </label>
             <button
               type="button"
-              onClick={handleOpenBulkApproval}
+              onClick={() => handleOpenBulkApproval()}
               disabled={selectedApprovalKeys.length === 0}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -1983,6 +1990,9 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
 
           const isCollapsed = collapsedGroups[groupCat.id];
           const GroupIcon = groupCat.icon;
+          const groupApprovalKeys = bulkSelectableSubmissions
+            .filter((sub) => groupCat.matchTypes.includes((sub.type || "").toLowerCase()))
+            .map((sub) => `${sub.type}:${sub.id}`);
 
           return (
             <div
@@ -2022,6 +2032,19 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                 </div>
 
                 <div className="flex items-center gap-2 text-slate-600 font-extrabold text-xs">
+                  {groupApprovalKeys.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleOpenBulkApproval(groupApprovalKeys);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-extrabold text-white shadow-sm transition hover:bg-emerald-700"
+                    >
+                      <Check className="h-3.5 w-3.5 stroke-[3]" />
+                      Setujui Semua {groupCat.name.replace("Form ", "")}
+                    </button>
+                  )}
                   <span className="hidden sm:inline">
                     {isCollapsed ? "Buka Group" : "Tutup Group"}
                   </span>
@@ -2053,7 +2076,7 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                         <table className="w-full text-left text-xs border-collapse">
                           <thead>
                             <tr className="bg-slate-100/90 text-slate-600 font-bold border-b border-slate-200/80 text-[11px] uppercase tracking-wider">
-                              {currentUser.role === "approved1" && (
+                              {isBulkApprover && (
                                 <th className="py-2.5 px-3.5 text-center w-10">Pilih</th>
                               )}
                               <th className="py-2.5 px-3.5 text-center w-10">No</th>
@@ -2075,9 +2098,9 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                               return (
                                 <Fragment key={sub.id}>
                                   <tr className={`hover:bg-slate-50/80 transition-colors ${isActiveUserTurn ? "bg-amber-50/30" : ""}`}>
-                                    {currentUser.role === "approved1" && (
+                                    {isBulkApprover && (
                                       <td className="py-3 px-3.5 text-center">
-                                        {sub.currentApproverRole === "approved1" && isActiveUserTurn && (
+                                        {selectableApprovalKeys.includes(`${sub.type}:${sub.id}`) && isActiveUserTurn && (
                                           <input
                                             type="checkbox"
                                             checked={selectedApprovalKeys.includes(`${sub.type}:${sub.id}`)}
