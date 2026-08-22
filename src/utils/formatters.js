@@ -102,7 +102,7 @@ export function calculateOvertimeCost(gajiPokok, durasiJam, isHariLibur, formula
       }
     }
   }
-  return Math.round(hourlyRate * totalMultiplier);
+  return Math.ceil(hourlyRate * totalMultiplier);
 }
 
 export function calculateAccruedCuti(tanggalMasuk, usedCutiDays = 0, maxAllowedYearly = 12) {

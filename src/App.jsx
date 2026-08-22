@@ -28,6 +28,7 @@ import { JabatanPage } from "./pages/JabatanPage";
 import { UmkPage } from "./pages/UmkPage";
 import { FaktorUpahPage } from "./pages/FaktorUpahPage";
 import { HariLiburPage } from "./pages/HariLiburPage";
+import { MasterLemburPage } from "./pages/MasterLemburPage";
 import { MutasiPegawaiPage } from "./pages/MutasiPegawaiPage";
 import { UsersPage } from "./pages/UsersPage";
 import { RolesPage } from "./pages/RolesPage";
@@ -1410,6 +1411,7 @@ function AppContent() {
                   </RouteAccessGuard>
                }
             />
+            <Route path="master-lembur" element={<RouteAccessGuard moduleId="master-lembur" currentUser={currentUser}><MasterLemburPage /></RouteAccessGuard>} />
             <Route
                path="mutasi-pegawai"
                element={

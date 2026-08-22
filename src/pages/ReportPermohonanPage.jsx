@@ -35,16 +35,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { api } from "../services/api";
 import { mapWorkflowSubmission } from "../utils/workflowSubmissionMapper";
 import { matchesNavbarTransactionFilter } from "../utils/navbarTransactionFilter";
+import { filterReportTransactionsByView, isReplacementOvertimeReport } from "../utils/reportFormatting";
 
 const DEFAULT_SIGNATORIES = DataService.getDefaultReportSignatories("UPT Semarang");
-
-const isReplacementOvertime = (submission) => {
-  if (submission?.type !== "lembur") return false;
-  const text = [submission.kategoriLembur, submission.jenisPekerjaan, submission.dasarLemburType, submission.keterangan]
-    .filter(Boolean).join(" ").toUpperCase();
-  return ["CUTI", "IJIN", "IZIN", "SAKIT"].some((keyword) => text.includes(keyword))
-    && (text.includes("PENGGANTI") || ["CUTI", "IJIN", "IZIN", "SAKIT"].includes(String(submission.dasarLemburType || "").toUpperCase()));
-};
 
 export const ReportPermohonanPage = ({
   currentUser,
@@ -345,7 +338,7 @@ export const ReportPermohonanPage = ({
   // Filter ONLY submissions with status APPROVED / approved (Completed Approval 3)
   const visibleByReportMode = useMemo(() => {
     if (isPlnEsView) return reportSubmissions;
-    return reportSubmissions.filter((sub) => {
+    return filterReportTransactionsByView(reportSubmissions, "PLN").filter((sub) => {
       const s = sub.status ? sub.status.toUpperCase() : "";
       return s === "APPROVED";
     });
@@ -1033,8 +1026,8 @@ export const ReportPermohonanPage = ({
                       {isPlnEsView && (
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           {sub.type === "lembur" ? (
-                            <span className={`inline-flex px-2.5 py-1 rounded-full border text-[10px] font-black ${isReplacementOvertime(sub) ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-sky-50 text-sky-700 border-sky-200"}`}>
-                              {isReplacementOvertime(sub) ? "Pengganti Piket (Cuti/Ijin/Sakit)" : "Lembur Operasional"}
+                            <span className={`inline-flex px-2.5 py-1 rounded-full border text-[10px] font-black ${isReplacementOvertimeReport(sub) ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-sky-50 text-sky-700 border-sky-200"}`}>
+                              {isReplacementOvertimeReport(sub) ? "Pengganti Piket (Cuti/Ijin/Sakit)" : "Lembur Operasional"}
                             </span>
                           ) : <span className="text-slate-400">-</span>}
                         </td>

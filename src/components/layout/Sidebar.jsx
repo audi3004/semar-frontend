@@ -26,6 +26,7 @@ import {
   X,
   PanelLeft,
   Network
+  ,ClipboardList
 } from "lucide-react";
 import { ResponsibilityService } from "../../services/responsibilityService";
 
@@ -90,6 +91,7 @@ export const Sidebar = ({
     { id: "roles", label: "Roles", icon: ShieldCheck },
     { id: "unit-role", label: "Unit Role", icon: Network },
     { id: "hari-libur", label: "Hari Libur", icon: Calendar },
+    { id: "master-lembur", label: "Kategori & Jenis Lembur", icon: ClipboardList },
     { id: "responsibilities", label: "Responsibility & Role User", icon: Sliders }
   ];
 
@@ -234,7 +236,7 @@ export const Sidebar = ({
 
       {/* Sidebar Container */}
       <aside
-        className={`bg-white/95 backdrop-blur-xl text-slate-800 border-r border-slate-200/80 flex-shrink-0 flex flex-col select-none fixed left-0 top-0 z-40 transition-all duration-300 shadow-[8px_0_30px_rgba(15,23,42,0.05)] h-dvh overflow-hidden ${
+        className={`bg-white/95 backdrop-blur-xl text-slate-800 border-r border-slate-200/80 flex-shrink-0 flex flex-col select-none fixed left-0 top-0 z-50 md:z-40 transition-all duration-300 shadow-[8px_0_30px_rgba(15,23,42,0.05)] h-dvh overflow-hidden ${
           isOpen
             ? "translate-x-0 w-64 p-3.5"
             : "-translate-x-full w-64 p-3.5 md:translate-x-0 md:w-16 md:p-2"
@@ -278,7 +280,7 @@ export const Sidebar = ({
           </div>
 
           {/* Hanya daftar menu yang bergulir; kontrol sidebar tetap di atas. */}
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-none space-y-3 pr-0.5">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-none space-y-3 pr-0.5 pb-[calc(5rem+env(safe-area-inset-bottom))] scroll-pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-2 md:scroll-pb-2">
           {/* Layer 1: Operasional / Transaksional */}
           <div className="space-y-1">
             {renderSectionHeader(

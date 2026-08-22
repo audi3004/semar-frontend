@@ -10,6 +10,7 @@ import {
 } from "../../utils/formatters";
 import { DataService } from "../../services/dataService";
 import { DOCUMENT_LETTERHEAD } from "../pdf/documentLetterhead";
+import { appendOvertimeCorrection, formatReportUnitHierarchy } from "../../utils/reportFormatting";
 
 const plnLogo = PLN_LOGO_PNG_BASE64;
 
@@ -76,6 +77,16 @@ export const ReportDocument = ({
           }
           .print-footer-space {
             height: 60px;
+          }
+          thead {
+            display: table-header-group;
+          }
+          tbody {
+            display: table-row-group;
+          }
+          tr {
+            break-inside: avoid;
+            page-break-inside: avoid;
           }
           /* Counter Halaman Otomatis */
           .page-counter::after {
@@ -212,17 +223,13 @@ export const ReportDocument = ({
                                     {item.type || item.jenisPermohonan || "-"}
                                  </td>
                                  <td className="border border-black p-2">
-                                    {item.unitKerja ||
-                                       item.unitUltg ||
-                                       item.unitUpt ||
-                                       item.unit ||
-                                       "-"}
+                                    {formatReportUnitHierarchy(item)}
                                  </td>
                                  <td className="border border-black p-2">
-                                    {item.keterangan || item.kegiatanDetail ||
+                                    {appendOvertimeCorrection(item.keterangan || item.kegiatanDetail ||
                                        item.maksudPerjalanan || item.maksudSppd ||
                                        item.diagnosaSingkat || item.ijinReasonType || item.cutiType || item.alasan ||
-                                       "-"}
+                                       "-", item)}
                                  </td>
                                  <td className="border border-black p-2 text-right font-bold">
                                     {nominal}

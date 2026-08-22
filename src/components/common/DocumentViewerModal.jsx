@@ -25,6 +25,7 @@ import {
    getFormattedDocNo,
 } from "../../utils/formatters";
 import { getSubmissionAttachments } from "../../utils/pdfAttachments";
+import { getStaticSppdExpenses } from "../../utils/sppdExpenses";
 import { PdfService } from "../../services/pdfService";
 import { DataService } from "../../services/dataService";
 import { AuthService } from "../../services/authService";
@@ -273,11 +274,12 @@ const DocumentViewerModalContent = ({
       showSppdNominal = !isMakerCheckerApp1;
    }
 
+   const sppdExpenses = submission ? getStaticSppdExpenses(submission) : [];
    const calculatedTotalSppd = submission
       ? submission.totalEstimasiBiaya &&
         Number(submission.totalEstimasiBiaya) > 0
          ? Number(submission.totalEstimasiBiaya)
-         : (submission.expenses || []).reduce(
+          : sppdExpenses.reduce(
               (acc, e) => acc + (Number(e.nominal) || 0),
               0,
            )
@@ -498,7 +500,7 @@ const DocumentViewerModalContent = ({
       .reduce((acc, s) => acc + (Number(s.durasiJam) || 0), 0);
 
    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto select-none modal-backdrop">
+      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto select-none modal-backdrop">
          <style>{`
         @media print {
           body {
@@ -1302,10 +1304,10 @@ const DocumentViewerModalContent = ({
                                        Sisa Cuti Pasca Pengajuan:
                                     </span>{" "}
                                     <strong className="ml-1 text-black">
-                                       {submission.sisaCutiSesudahnya} Hari
+                                       {submission.sisaCutiSesudahnya ?? "-"} Hari
                                     </strong>{" "}
                                     (Sebelumnya:{" "}
-                                    {submission.sisaCutiSebelumnya || "-"} Hari)
+                                    {submission.sisaCutiSebelumnya ?? "-"} Hari)
                                  </p>
                                  <p className="col-span-full">
                                     <span className="text-black">
@@ -1454,14 +1456,6 @@ const DocumentViewerModalContent = ({
                                           )}
                                        </strong>
                                     </p>
-                                    <p>
-                                       <span className="text-black">
-                                          Beban Anggaran Unit:
-                                       </span>{" "}
-                                       <strong className="ml-1">
-                                          {submission.bebanAnggaranUnit || "-"}
-                                       </strong>
-                                    </p>
                                     <p className="col-span-full">
                                        <span className="text-black">
                                           Maksud Perjalanan:
@@ -1476,10 +1470,7 @@ const DocumentViewerModalContent = ({
                                        <thead>
                                           <tr className="bg-white text-black font-extrabold border-b border-black">
                                              <th className="p-1.5 border-r border-black">
-                                                Rincian Komponen Biaya
-                                             </th>
-                                             <th className="p-1.5 border-r border-black">
-                                                Kategori
+                                                 Komponen Biaya
                                              </th>
                                              <th className="p-1.5 text-right">
                                                 Nominal (Rp)
@@ -1487,16 +1478,13 @@ const DocumentViewerModalContent = ({
                                           </tr>
                                        </thead>
                                        <tbody>
-                                          {submission.expenses?.map((exp) => (
+                                           {sppdExpenses.map((exp) => (
                                              <tr
                                                 key={exp.id}
                                                 className="border-b border-black/40"
                                              >
                                                 <td className="p-1.5 border-r border-black/40">
                                                    {exp.deskripsi}
-                                                </td>
-                                                <td className="p-1.5 border-r border-black/40">
-                                                   {exp.kategori}
                                                 </td>
                                                 <td className="p-1.5 text-right font-mono font-bold">
                                                    {showSppdNominal
@@ -1509,7 +1497,7 @@ const DocumentViewerModalContent = ({
                                           ))}
                                           <tr className="font-extrabold bg-white border-t border-black">
                                              <td
-                                                colSpan={2}
+                                                 colSpan={1}
                                                 className="p-1.5 text-right border-r border-black"
                                              >
                                                 TOTAL SPPD:

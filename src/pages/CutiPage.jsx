@@ -82,6 +82,8 @@ export const CutiPage = ({
     tanggalMulai: item.tgl_mulai,
     tanggalSelesai: item.tgl_selesai,
     jumlahHari: Number(item.lama_hari || 0),
+    sisaCutiSebelumnya: item.sisa_cuti_sebelum == null ? null : Number(item.sisa_cuti_sebelum),
+    sisaCutiSesudahnya: item.sisa_cuti_setelah == null ? null : Number(item.sisa_cuti_setelah),
     alamatSelamaCuti: item.contact_alamat || "",
     nomorTeleponDarurat: item.nomor_telepon_darurat || "",
     makerSignatureUrl: resolveBackendFileUrl(item.maker_signature),
@@ -714,7 +716,7 @@ export const CutiPage = ({
                       </div>
                       <div className="flex items-center justify-between pt-1 border-t border-slate-200/40 text-[10px] text-slate-600 font-medium">
                         <span>Durasi: <strong className="text-slate-900">{sub.jumlahHari} Hari</strong></span>
-                        <span>Sisa Pasca: <strong className="text-sky-700 font-mono">{sub.sisaCutiSesudahnya} Hari</strong></span>
+                        <span>Sisa Pasca: <strong className="text-sky-700 font-mono">{sub.sisaCutiSesudahnya ?? "-"} Hari</strong></span>
                       </div>
                     </div>
 
@@ -839,7 +841,7 @@ export const CutiPage = ({
                         {formatDateIndonesian(sub.tanggalMulai)} s/d {formatDateIndonesian(sub.tanggalSelesai)}
                       </td>
                       <td className="p-3 font-bold text-slate-800">{sub.jumlahHari} Hari</td>
-                      <td className="p-3 font-mono font-bold text-sky-700">{sub.sisaCutiSesudahnya} Hari</td>
+                      <td className="p-3 font-mono font-bold text-sky-700">{sub.sisaCutiSesudahnya ?? "-"} Hari</td>
                       <td className="p-3">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusBadgeColor(sub.status)}`}>
                           {getStatusLabel(sub.status)}
@@ -969,7 +971,7 @@ export const CutiPage = ({
                         <p>Periode: {formatDateIndonesian(sub.tanggalMulai)} s/d {formatDateIndonesian(sub.tanggalSelesai)}</p>
                         <div className="flex justify-between font-bold pt-1 border-t border-slate-100">
                           <span>Durasi: {sub.jumlahHari} Hari</span>
-                          <span className="text-sky-700">Sisa Pasca: {sub.sisaCutiSesudahnya} Hari</span>
+                          <span className="text-sky-700">Sisa Pasca: {sub.sisaCutiSesudahnya ?? "-"} Hari</span>
                         </div>
                       </div>
                     </div>
@@ -1010,7 +1012,7 @@ export const CutiPage = ({
                             {formatDateIndonesian(sub.tanggalMulai)} s/d {formatDateIndonesian(sub.tanggalSelesai)}
                           </td>
                           <td className="p-3 text-center font-bold text-slate-800">{sub.jumlahHari} Hari</td>
-                          <td className="p-3 text-center font-mono font-bold text-sky-700">{sub.sisaCutiSesudahnya} Hari</td>
+                          <td className="p-3 text-center font-mono font-bold text-sky-700">{sub.sisaCutiSesudahnya ?? "-"} Hari</td>
                           <td className="p-3">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusBadgeColor(sub.status)}`}>
                               {getStatusLabel(sub.status)}

@@ -48,8 +48,6 @@ import {
   Layers,
   FolderOpen,
   Briefcase,
-  Trash2,
-  Plus,
   Edit3,
   Save,
   RotateCcw,
@@ -199,12 +197,13 @@ const mapCheckerEditPayload = (type, data) => {
   };
   if (type === "sppd") {
     return {
+      ...(data.nomorSuratTugas !== undefined && { no_sppd: data.nomorSuratTugas }),
       ...(data.maksudPerjalanan !== undefined && { maksud_dinas: data.maksudPerjalanan }),
       ...(data.kotaAsal !== undefined && { kota_asal: data.kotaAsal }),
       ...(data.kotaTujuan !== undefined && { kota_tujuan: data.kotaTujuan }),
       ...(data.tanggalBerangkat !== undefined && { tgl_berangkat: data.tanggalBerangkat }),
       ...(data.tanggalKembali !== undefined && { tgl_kembali: data.tanggalKembali }),
-      ...mapSppdExpensesPayload(data.expenses)
+      ...(data.expenses !== undefined && mapSppdExpensesPayload(data.expenses))
     };
   }
   return {};
@@ -447,7 +446,6 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
 
   // Checker Expense Management (SPPD Task)
   const [checkerExpenses, setCheckerExpenses] = useState([]);
-  const [isCheckerSppdModalOpen, setIsCheckerSppdModalOpen] = useState(false);
 
   // Checker Lembur Correction Management
   const [checkerLemburSub, setCheckerLemburSub] = useState(null);
@@ -497,13 +495,13 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
   // SPPD Checker Extra States
   const [isCheckerSppdEditOpen, setIsCheckerSppdEditOpen] = useState(false);
   const [checkerSppdSub, setCheckerSppdSub] = useState(null);
+  const [checkerSppdNomorSurat, setCheckerSppdNomorSurat] = useState("");
   const [checkerSppdMaksud, setCheckerSppdMaksud] = useState("");
   const [checkerSppdKotaAsal, setCheckerSppdKotaAsal] = useState("");
   const [checkerSppdKotaTujuan, setCheckerSppdKotaTujuan] = useState("");
   const [checkerSppdTanggalBerangkat, setCheckerSppdTanggalBerangkat] = useState("");
   const [checkerSppdTanggalKembali, setCheckerSppdTanggalKembali] = useState("");
   const [checkerSppdDurasiHari, setCheckerSppdDurasiHari] = useState(1);
-  const [checkerSppdKategori, setCheckerSppdKategori] = useState("");
 
   // Auto duration calculations for Checker
   useEffect(() => {
@@ -877,20 +875,20 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
   const handleOpenCheckerSppdEditModal = (sub) => {
     setCheckerSppdSub(sub);
     setApproveSub(sub);
+    setCheckerSppdNomorSurat(sub.nomorSuratTugas || "");
     setCheckerSppdMaksud(sub.maksudPerjalanan || "");
     setCheckerSppdKotaAsal(sub.kotaAsal || "");
     setCheckerSppdKotaTujuan(sub.kotaTujuan || "");
     setCheckerSppdTanggalBerangkat(sub.tanggalBerangkat || "");
     setCheckerSppdTanggalKembali(sub.tanggalKembali || "");
     setCheckerSppdDurasiHari(sub.durasiHari || 1);
-    setCheckerSppdKategori(sub.kategoriSppd || "Dalam Wilayah");
     setCheckerExpenses(
       sub.expenses && sub.expenses.length > 0
         ? sub.expenses.map((e) => ({ ...e }))
         : [
-            { id: "exp-1", deskripsi: "Biaya Transportasi Perjalanan Dinas", kategori: "Transportasi", nominal: 0 },
-            { id: "exp-2", deskripsi: "Uang Harian Perjalanan Dinas", kategori: "Uang Harian", nominal: 0 },
-            { id: "exp-3", deskripsi: "Biaya Penginapan / Hotel", kategori: "Akomodasi", nominal: 0 }
+            { id: "transportasi", deskripsi: "Transportasi", kategori: "Transportasi", nominal: 0 },
+            { id: "akomodasi", deskripsi: "Akomodasi", kategori: "Akomodasi", nominal: 0 },
+            { id: "lain-lain", deskripsi: "Lain-lain", kategori: "Lain-lain", nominal: 0 }
           ]
     );
     setIsCheckerSppdEditOpen(true);
@@ -1149,35 +1147,12 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
     if (e) e.preventDefault();
     if (!checkerSppdSub) return;
 
-    if (checkerExpenses.length === 0) {
-      setAlertModal({
-        isOpen: true,
-        type: "error",
-        title: "Komponen Biaya Kosong",
-        message: "Harap tambahkan minimal 1 komponen biaya SPPD."
-      });
-      return;
-    }
-    const hasEmptyDesc = checkerExpenses.some((e) => !e.deskripsi || !e.deskripsi.trim());
-    if (hasEmptyDesc) {
-      setAlertModal({
-        isOpen: true,
-        type: "error",
-        title: "Deskripsi Kosong",
-        message: "Harap isi deskripsi untuk seluruh komponen biaya SPPD."
-      });
-      return;
-    }
-
     const updatedFields = {
+      nomorSuratTugas: checkerSppdNomorSurat,
       maksudPerjalanan: checkerSppdMaksud,
-      kotaAsal: checkerSppdKotaAsal,
-      kotaTujuan: checkerSppdKotaTujuan,
       tanggalBerangkat: checkerSppdTanggalBerangkat,
       tanggalKembali: checkerSppdTanggalKembali,
-      durasiHari: checkerSppdDurasiHari,
-      kategoriSppd: checkerSppdKategori,
-      expenses: checkerExpenses
+      durasiHari: checkerSppdDurasiHari
     };
 
     try {
@@ -1199,35 +1174,12 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
   const handleApproveWithCheckerSppdCorrection = () => {
     if (!checkerSppdSub) return;
 
-    if (checkerExpenses.length === 0) {
-      setAlertModal({
-        isOpen: true,
-        type: "error",
-        title: "Komponen Biaya Kosong",
-        message: "Harap tambahkan minimal 1 komponen biaya SPPD."
-      });
-      return;
-    }
-    const hasEmptyDesc = checkerExpenses.some((e) => !e.deskripsi || !e.deskripsi.trim());
-    if (hasEmptyDesc) {
-      setAlertModal({
-        isOpen: true,
-        type: "error",
-        title: "Deskripsi Kosong",
-        message: "Harap isi deskripsi untuk seluruh komponen biaya SPPD."
-      });
-      return;
-    }
-
     const updatedFields = {
+      nomorSuratTugas: checkerSppdNomorSurat,
       maksudPerjalanan: checkerSppdMaksud,
-      kotaAsal: checkerSppdKotaAsal,
-      kotaTujuan: checkerSppdKotaTujuan,
       tanggalBerangkat: checkerSppdTanggalBerangkat,
       tanggalKembali: checkerSppdTanggalKembali,
-      durasiHari: checkerSppdDurasiHari,
-      kategoriSppd: checkerSppdKategori,
-      expenses: checkerExpenses
+      durasiHari: checkerSppdDurasiHari
     };
 
     setApproveSub(checkerSppdSub);
@@ -1315,36 +1267,17 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
 
   const handleOpenApproveSign = (sub) => {
     setApproveSub(sub);
+    // Jangan membawa koreksi dari transaksi sebelumnya ke proses approval baru.
+    setCheckerExtraData({});
     const effectiveRole = currentUser.role === "admin" ? sub.currentApproverRole : currentUser.role;
 
     if (effectiveRole === "checker" && sub.type === "lembur") {
       handleOpenCheckerLemburModal(sub);
-    } else if (effectiveRole === "checker" && sub.type === "ijin") {
-      handleOpenCheckerIjinModal(sub);
-    } else if (effectiveRole === "checker" && sub.type === "cuti") {
-      handleOpenCheckerCutiModal(sub);
-    } else if (effectiveRole === "checker" && sub.type === "sakit") {
-      handleOpenCheckerSakitModal(sub);
     } else if (effectiveRole === "checker" && sub.type === "sppd") {
-      setCheckerExpenses(
-        sub.expenses && sub.expenses.length > 0
-          ? sub.expenses.map((e) => ({
-              ...e,
-              kategori: ["Transportasi", "Akomodasi", "Uang Harian", "Lain-lain"].includes(e.kategori) ? e.kategori : "Lain-lain",
-              nominal: 0
-            }))
-          : [
-              { id: "exp-1", deskripsi: "Biaya Transportasi Perjalanan Dinas", kategori: "Transportasi", nominal: 0 },
-              { id: "exp-2", deskripsi: "Uang Harian Perjalanan Dinas", kategori: "Uang Harian", nominal: 0 },
-              { id: "exp-3", deskripsi: "Biaya Penginapan / Hotel", kategori: "Akomodasi", nominal: 0 }
-            ]
-      );
-      setIsCheckerSppdModalOpen(true);
-    } else if ((effectiveRole === "approved1" || effectiveRole === "approved2") && sub.type === "sppd") {
+      handleOpenCheckerSppdEditModal(sub);
+    } else if (effectiveRole === "approved2" && sub.type === "sppd") {
       setApprover2Expenses(
-        sub.expenses && sub.expenses.length > 0
-          ? sub.expenses.map((e) => ({ ...e, nominal: e.nominal || 0 }))
-          : []
+        sub.expenses.map((expense) => ({ ...expense, nominal: expense.nominal || 0 }))
       );
       setIsApprover2SppdModalOpen(true);
     } else {
@@ -1357,9 +1290,7 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
     const effectiveRole = currentUser.role === "admin" ? approveSub.currentApproverRole : currentUser.role;
     let extra = { ...checkerExtraData };
 
-    if (effectiveRole === "checker" && approveSub.type === "sppd") {
-      extra = { expenses: checkerExpenses, totalEstimasiBiaya: 0 };
-    } else if ((effectiveRole === "approved1" || effectiveRole === "approved2") && approveSub.type === "sppd") {
+    if (effectiveRole === "approved2" && approveSub.type === "sppd") {
       const total = approver2Expenses.reduce((a, b) => a + (Number(b.nominal) || 0), 0);
       extra = { expenses: approver2Expenses, totalEstimasiBiaya: total };
     }
@@ -1390,7 +1321,7 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
       if (!moduleApi) throw new Error("Jenis transaksi tidak didukung");
       const shouldPersistCorrection = Object.keys(extra).length > 0 && (
         effectiveRole === "checker"
-        || (approveSub.type === "sppd" && ["approved1", "approved2"].includes(effectiveRole))
+        || (approveSub.type === "sppd" && effectiveRole === "approved2")
       );
       if (shouldPersistCorrection) {
         const correctionPayload = mapCheckerEditPayload(approveSub.type, extra);
@@ -1400,7 +1331,6 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
       }
       await moduleApi.approve(approveSub.id, buildApprovalPayload(dataUrl, effectiveRole, extra));
       setIsApproveSignOpen(false);
-      setIsCheckerSppdModalOpen(false);
       setIsApprover2SppdModalOpen(false);
       setAlertModal({
         isOpen: true,
@@ -2191,15 +2121,17 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                                               </button>
                                             ) : (
                                               <>
-                                                <ActionIconButton
-                                                  onClick={() => handleOpenRevise(sub)}
-                                                  label="Revisi"
-                                                  className="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 cursor-pointer"
-                                                >
-                                                  <RefreshCw className="w-3.5 h-3.5" />
-                                                </ActionIconButton>
+                                                {!(sub.type === "sppd" && (currentUser.role === "approved1" || (currentUser.role === "admin" && sub.currentApproverRole === "approved1"))) && (
+                                                  <ActionIconButton
+                                                    onClick={() => handleOpenRevise(sub)}
+                                                    label="Revisi"
+                                                    className="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 cursor-pointer"
+                                                  >
+                                                    <RefreshCw className="w-3.5 h-3.5" />
+                                                  </ActionIconButton>
+                                                )}
 
-                                                {/* Edit button for Checker (Lembur, Cuti, Ijin, Sakit & SPPD) */}
+                                                {/* Koreksi Checker hanya berlaku untuk transaksi yang memang mendukung koreksi. */}
                                                 {(currentUser.role === "checker" || (currentUser.role === "admin" && sub.currentApproverRole === "checker")) && (
                                                   <>
                                                     {sub.type === "lembur" && (
@@ -2207,33 +2139,6 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                                                         onClick={() => handleOpenCheckerLemburModal(sub)}
                                                         className="bg-[#00A3E0]/10 hover:bg-[#00A3E0]/20 text-[#00A3E0] border border-[#00A3E0]/30 cursor-pointer"
                                                         label="Edit Lembur"
-                                                      >
-                                                        <Edit3 className="w-3.5 h-3.5" />
-                                                      </ActionIconButton>
-                                                    )}
-                                                    {sub.type === "cuti" && (
-                                                      <ActionIconButton
-                                                        onClick={() => handleOpenCheckerCutiModal(sub)}
-                                                        className="bg-[#00A3E0]/10 hover:bg-[#00A3E0]/20 text-[#00A3E0] border border-[#00A3E0]/30 cursor-pointer"
-                                                        label="Edit Cuti"
-                                                      >
-                                                        <Edit3 className="w-3.5 h-3.5" />
-                                                      </ActionIconButton>
-                                                    )}
-                                                    {sub.type === "ijin" && (
-                                                      <ActionIconButton
-                                                        onClick={() => handleOpenCheckerIjinModal(sub)}
-                                                        className="bg-[#00A3E0]/10 hover:bg-[#00A3E0]/20 text-[#00A3E0] border border-[#00A3E0]/30 cursor-pointer"
-                                                        label="Edit Ijin"
-                                                      >
-                                                        <Edit3 className="w-3.5 h-3.5" />
-                                                      </ActionIconButton>
-                                                    )}
-                                                    {sub.type === "sakit" && (
-                                                      <ActionIconButton
-                                                        onClick={() => handleOpenCheckerSakitModal(sub)}
-                                                        className="bg-[#00A3E0]/10 hover:bg-[#00A3E0]/20 text-[#00A3E0] border border-[#00A3E0]/30 cursor-pointer"
-                                                        label="Edit Sakit"
                                                       >
                                                         <Edit3 className="w-3.5 h-3.5" />
                                                       </ActionIconButton>
@@ -2466,142 +2371,13 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
         title={`Minta Revisi Dokumen (${reviseSub?.nomorDokumen || ""})`}
       />
 
-      {/* Task 2: Checker SPPD Expenses Modal */}
-      {isCheckerSppdModalOpen && approveSub && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 select-none">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-base font-bold text-slate-900 flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-sky-600" />
-                Penentuan Rincian Komponen Biaya SPPD (Role Checker)
-              </span>
-            </h3>
-
-            <div className="space-y-3 text-xs">
-              <div className="bg-sky-50/80 p-3 rounded-2xl border border-sky-200 space-y-1">
-                <p className="font-bold text-slate-900">{approveSub.employeeName} ({approveSub.employeeNip})</p>
-                <p className="text-slate-700 font-semibold">{approveSub.maksudPerjalanan}</p>
-                <p className="text-slate-600">Rute: {approveSub.kotaAsal} &rarr; {approveSub.kotaTujuan} ({approveSub.durasiHari} Hari)</p>
-                <p className="text-sky-800 text-[11px] font-semibold pt-1 border-t border-sky-200/60 mt-1">
-                  * Tambahkan / edit komponen biaya SPPD. Nilai nominal terisi default 0 &amp; bersifat Readonly (nominal diisi oleh Approved 2).
-                </p>
-              </div>
-
-              <div className="space-y-2 border border-slate-200 p-3 rounded-2xl bg-slate-50">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-slate-800">
-                    Rincian Komponen Biaya SPPD
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCheckerExpenses([
-                        ...checkerExpenses,
-                        { id: "exp-" + Date.now(), deskripsi: "Komponen Biaya SPPD", kategori: "Transportasi", nominal: 0 }
-                      ]);
-                    }}
-                    className="px-3 py-1.5 text-[11px] font-extrabold bg-sky-100 text-sky-800 hover:bg-sky-200 active:bg-sky-300 rounded-xl transition cursor-pointer flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Tambah Item
-                  </button>
-                </div>
-
-                {checkerExpenses.map((exp, idx) => (
-                  <div key={exp.id} className="grid grid-cols-12 gap-1.5 items-center bg-white p-1.5 rounded-xl border border-slate-200">
-                    <input
-                      type="text"
-                      value={exp.deskripsi}
-                      onChange={(e) => {
-                        const newExp = [...checkerExpenses];
-                        newExp[idx].deskripsi = e.target.value;
-                        setCheckerExpenses(newExp);
-                      }}
-                      placeholder="Deskripsi Komponen..."
-                      className="col-span-5 h-9 px-2 border border-slate-300 rounded-lg bg-white text-slate-900 text-[11px] font-medium focus:outline-none"
-                    />
-                    <select
-                      value={exp.kategori}
-                      onChange={(e) => {
-                        const newExp = [...checkerExpenses];
-                        newExp[idx].kategori = e.target.value;
-                        setCheckerExpenses(newExp);
-                      }}
-                      className="col-span-4 h-9 px-1.5 border border-slate-300 rounded-lg bg-white text-slate-900 text-[10.5px] font-semibold focus:outline-none cursor-pointer"
-                    >
-                      <option value="Transportasi">Transportasi</option>
-                      <option value="Akomodasi">Akomodasi</option>
-                      <option value="Uang Harian">Uang Harian</option>
-                      <option value="Lain-lain">Lain-lain</option>
-                    </select>
-                    <input
-                      type="text"
-                      readOnly
-                      value="Rp 0 (Readonly)"
-                      className="col-span-2 h-9 px-1 border border-slate-200 rounded-lg bg-slate-100 text-slate-500 font-mono text-[9.5px] text-center focus:outline-none select-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setCheckerExpenses(checkerExpenses.filter((e) => e.id !== exp.id))}
-                      className="col-span-1 text-rose-500 hover:text-rose-700 flex justify-center cursor-pointer active:scale-95"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsCheckerSppdModalOpen(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (checkerExpenses.length === 0) {
-                    setAlertModal({
-                      isOpen: true,
-                      type: "error",
-                      title: "Komponen Biaya Kosong",
-                      message: "Harap tambahkan minimal 1 komponen biaya SPPD."
-                    });
-                    return;
-                  }
-                  const hasEmptyDesc = checkerExpenses.some((e) => !e.deskripsi || !e.deskripsi.trim());
-                  if (hasEmptyDesc) {
-                    setAlertModal({
-                      isOpen: true,
-                      type: "error",
-                      title: "Deskripsi Kosong",
-                      message: "Harap isi deskripsi untuk seluruh komponen biaya SPPD."
-                    });
-                    return;
-                  }
-                  setIsCheckerSppdModalOpen(false);
-                  setIsApproveSignOpen(true);
-                }}
-                className="px-4 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer"
-              >
-                <Check className="w-4 h-4" /> Lanjut Tandatangan
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Approval 1 correction / Approval 2 nominal SPPD modal */}
+      {/* Approval 2 nominal SPPD modal */}
       {isApprover2SppdModalOpen && approveSub && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 select-none">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
               <Briefcase className="w-5 h-5 text-emerald-600" />
-              {(currentUser.role === "admin" ? approveSub.currentApproverRole : currentUser.role) === "approved1"
-                ? "Koreksi Komponen Biaya SPPD (Approval 1)"
-                : "Input Nominal Biaya SPPD (Approval 2)"}
+              Input Nominal Biaya SPPD (Approval 2)
             </h3>
 
             <div className="space-y-3 text-xs">
@@ -2610,9 +2386,7 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                 <p className="text-slate-700 font-semibold">{approveSub.maksudPerjalanan}</p>
                 <p className="text-slate-600">Rute: {approveSub.kotaAsal} &rarr; {approveSub.kotaTujuan} ({approveSub.durasiHari} Hari)</p>
                 <p className="text-emerald-800 text-[11px] font-bold pt-1 border-t border-emerald-200/60 mt-1">
-                  {(currentUser.role === "admin" ? approveSub.currentApproverRole : currentUser.role) === "approved1"
-                    ? "* Periksa komponen dari Checker. Hapus komponen yang tidak disetujui sebelum melanjutkan."
-                    : "* Wajib memasukkan nominal rupiah untuk setiap komponen biaya SPPD yang telah dikoreksi Approval 1."}
+                  * Wajib memasukkan nominal rupiah untuk ketiga komponen biaya SPPD.
                 </p>
               </div>
 
@@ -2629,17 +2403,6 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                         {exp.kategori}
                       </span>
                     </div>
-                    {(currentUser.role === "admin" ? approveSub.currentApproverRole : currentUser.role) === "approved1" ? (
-                      <div className="col-span-6 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => setApprover2Expenses((current) => current.filter((_, itemIndex) => itemIndex !== idx))}
-                          className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-[11px]"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" /> Hapus Komponen
-                        </button>
-                      </div>
-                    ) : (
                       <div className="col-span-6">
                         <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Nominal (Rp)</label>
                         <input
@@ -2656,7 +2419,6 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                           className="w-full h-9 px-2 border border-emerald-300 rounded-lg bg-white font-mono font-bold text-emerald-800 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                         />
                       </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -2700,9 +2462,7 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                 className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer"
               >
                 <Check className="w-4 h-4" />
-                {(currentUser.role === "admin" ? approveSub.currentApproverRole : currentUser.role) === "approved1"
-                  ? "Simpan Koreksi & Lanjut Tandatangan"
-                  : "Simpan Nominal & Lanjut Tandatangan"}
+                Simpan Nominal &amp; Lanjut Tandatangan
               </button>
             </div>
           </div>
@@ -3401,8 +3161,8 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                     <input
                       type="text"
                       value={checkerSppdKotaAsal}
-                      onChange={(e) => setCheckerSppdKotaAsal(e.target.value)}
-                      className="w-full h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                      readOnly
+                      className="w-full h-9 px-2 bg-slate-100 border border-slate-300 rounded-lg text-xs text-slate-600"
                     />
                   </div>
                   <div>
@@ -3410,8 +3170,8 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                     <input
                       type="text"
                       value={checkerSppdKotaTujuan}
-                      onChange={(e) => setCheckerSppdKotaTujuan(e.target.value)}
-                      className="w-full h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                      readOnly
+                      className="w-full h-9 px-2 bg-slate-100 border border-slate-300 rounded-lg text-xs text-slate-600"
                     />
                   </div>
                 </div>
@@ -3439,25 +3199,17 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
 
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block font-bold text-slate-800 mb-1">Durasi (Hari)</label>
+                    <label className="block font-bold text-slate-800 mb-1">Nomor Surat SPPD</label>
                     <input
-                      type="number"
-                      readOnly
-                      value={checkerSppdDurasiHari}
-                      className="w-full h-9 px-2 bg-slate-100 border border-slate-300 rounded-lg text-xs text-slate-500 font-bold"
+                      type="text"
+                      value={checkerSppdNomorSurat}
+                      onChange={(e) => setCheckerSppdNomorSurat(e.target.value)}
+                      className="w-full h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-800 mb-1">Kategori SPPD</label>
-                    <select
-                      value={checkerSppdKategori}
-                      onChange={(e) => setCheckerSppdKategori(e.target.value)}
-                      className="w-full h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
-                    >
-                      <option value="Dalam Wilayah">Dalam Wilayah</option>
-                      <option value="Luar Wilayah">Luar Wilayah</option>
-                      <option value="Luar Negeri">Luar Negeri</option>
-                    </select>
+                    <label className="block font-bold text-slate-800 mb-1">Durasi (Hari)</label>
+                    <input type="number" readOnly value={checkerSppdDurasiHari} className="w-full h-9 px-2 bg-slate-100 border border-slate-300 rounded-lg text-xs text-slate-500 font-bold" />
                   </div>
                 </div>
 
@@ -3465,18 +3217,7 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                 <div className="space-y-2 border-t border-slate-200 pt-3">
                   <div className="flex items-center justify-between">
                     <label className="font-bold text-slate-800">Rincian Komponen Biaya SPPD</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCheckerExpenses([
-                          ...checkerExpenses,
-                          { id: "exp-" + Date.now(), deskripsi: "Komponen Biaya SPPD", kategori: "Transportasi", nominal: 0 }
-                        ]);
-                      }}
-                      className="px-2.5 py-1 text-[10px] font-bold bg-sky-100 text-sky-800 hover:bg-sky-200 rounded-lg flex items-center gap-1 cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" /> Tambah Item
-                    </button>
+                    <span className="text-[10px] font-semibold text-slate-500">Komponen tetap; nominal diisi Approval 2</span>
                   </div>
 
                   {checkerExpenses.map((exp, idx) => (
@@ -3484,35 +3225,20 @@ export const WorkflowPage = ({ currentUser: propCurrentUser, onRefreshData: prop
                       <input
                         type="text"
                         value={exp.deskripsi}
-                        onChange={(e) => {
-                          const newExp = [...checkerExpenses];
-                          newExp[idx].deskripsi = e.target.value;
-                          setCheckerExpenses(newExp);
-                        }}
+                        readOnly
                         placeholder="Deskripsi Komponen..."
-                        className="col-span-6 h-8 px-2 border border-slate-300 rounded-lg text-[10.5px] focus:outline-none"
+                        className="col-span-8 h-8 px-2 border border-slate-300 rounded-lg bg-slate-100 text-[10.5px]"
                       />
                       <select
                         value={exp.kategori}
-                        onChange={(e) => {
-                          const newExp = [...checkerExpenses];
-                          newExp[idx].kategori = e.target.value;
-                          setCheckerExpenses(newExp);
-                        }}
-                        className="col-span-4 h-8 px-1 border border-slate-300 rounded-lg text-[10px] focus:outline-none cursor-pointer"
+                        disabled
+                        className="col-span-4 h-8 px-1 border border-slate-300 rounded-lg bg-slate-100 text-[10px]"
                       >
                         <option value="Transportasi">Transportasi</option>
                         <option value="Akomodasi">Akomodasi</option>
                         <option value="Uang Harian">Uang Harian</option>
                         <option value="Lain-lain">Lain-lain</option>
                       </select>
-                      <button
-                        type="button"
-                        onClick={() => setCheckerExpenses(checkerExpenses.filter((e) => e.id !== exp.id))}
-                        className="col-span-2 text-rose-500 hover:text-rose-700 flex justify-center cursor-pointer active:scale-95"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   ))}
                 </div>

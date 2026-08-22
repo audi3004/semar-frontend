@@ -17,6 +17,7 @@ import { DataService } from "../../services/dataService";
 import { PLN_LOGO_PNG_BASE64 } from "../../assets/plnLogoBase64";
 import semarLogoDefault from "../../assets/logo_semar_trns.png";
 import { DOCUMENT_LETTERHEAD } from "./documentLetterhead";
+import { appendOvertimeCorrection, formatReportUnitHierarchy } from "../../utils/reportFormatting";
 
 const plnLogo = PLN_LOGO_PNG_BASE64;
 const pdfSafeText = (value) => String(value ?? "-").replace(/([\/-])/g, "$1\u200B");
@@ -582,17 +583,13 @@ export const ReportPdfDocument = ({
                               {item.type || item.jenisPermohonan || "-"}
                            </Text>
                            <Text style={[styles.td, { width: "14%" }]}>
-                              {pdfSafeText(item.unitKerja ||
-                                 item.unitUltg ||
-                                 item.unitUpt ||
-                                 item.unit ||
-                                 "-")}
+                              {pdfSafeText(formatReportUnitHierarchy(item))}
                            </Text>
                            <Text style={[styles.td, { width: "17%" }]}>
-                              {pdfSafeText(item.keterangan || item.kegiatanDetail ||
+                              {pdfSafeText(appendOvertimeCorrection(item.keterangan || item.kegiatanDetail ||
                                  item.maksudPerjalanan || item.maksudSppd ||
                                  item.diagnosaSingkat || item.ijinReasonType || item.cutiType || item.alasan ||
-                                 "-")}
+                                 "-", item))}
                            </Text>
                            <Text
                               style={[

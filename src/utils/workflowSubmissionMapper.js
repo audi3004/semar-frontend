@@ -136,7 +136,11 @@ export const mapWorkflowLembur = (item) => {
   jamMulai: String(item.jam_mulai || "").slice(0, 5),
   jamSelesai: String(item.jam_selesai || "").slice(0, 5),
   durasiJam: Number(item.total_jam || 0),
-  jumlahJamKoreksi: Number(item.jumlah_jam_koreksi ?? item.total_jam ?? 0),
+  jumlahJamKoreksi:
+    item.jumlah_jam_koreksi == null
+      ? null
+      : Number(item.jumlah_jam_koreksi),
+  durasiJamApproved: Number(item.jumlah_jam_koreksi ?? item.total_jam ?? 0),
   catatanKoreksi: item.catatan_koreksi || "",
   kategoriLembur: item.kategori_lembur || "",
   jenisPekerjaan: item.jenis_pekerjaan || "",
@@ -144,6 +148,8 @@ export const mapWorkflowLembur = (item) => {
   kegiatanDetail: item.detail_pekerjaan_lembur || "",
   biayaLembur: Number(item.biaya_lembur || 0),
   estimasiBiayaRupiah: Number(item.biaya_lembur || 0),
+  tarifLembur: Number(item.tarif_lembur || 0),
+  totalFaktorLembur: Number(item.total_faktor || 0),
   isHariLibur: item.is_hari_libur === "Y",
   dasarLemburType: item.dasar_lembur_type || "",
   nomorSpkl: item.spklAssignment?.spkl?.nomor_dokumen || "",
@@ -163,6 +169,8 @@ export const mapWorkflowCuti = (item) => ({
   tanggalMulai: item.tgl_mulai,
   tanggalSelesai: item.tgl_selesai,
   jumlahHari: Number(item.lama_hari || 0),
+  sisaCutiSebelumnya: item.sisa_cuti_sebelum == null ? null : Number(item.sisa_cuti_sebelum),
+  sisaCutiSesudahnya: item.sisa_cuti_setelah == null ? null : Number(item.sisa_cuti_setelah),
   alamatSelamaCuti: item.contact_alamat || "",
   nomorTeleponDarurat: item.nomor_telepon_darurat || "",
   keterangan: item.perihal || "",
@@ -200,10 +208,10 @@ export const mapWorkflowSakit = (item) => ({
 
 export const mapWorkflowSppd = (item) => {
   const expenses = [
-    { id: "akomodasi", kategori: "Akomodasi", deskripsi: item.desc_akomodasi, nominal: Number(item.rp_akomodasi || 0) },
-    { id: "transportasi", kategori: "Transportasi", deskripsi: item.desc_transportasi, nominal: Number(item.rp_transportasi || 0) },
-    { id: "lain-lain", kategori: "Lain-lain", deskripsi: item.desc_lain_lain, nominal: Number(item.rp_lain_lain || 0) }
-  ].filter((expense) => Boolean(String(expense.deskripsi || "").trim()) || expense.nominal > 0);
+    { id: "transportasi", kategori: "Transportasi", deskripsi: "Transportasi", nominal: Number(item.rp_transportasi || 0) },
+    { id: "akomodasi", kategori: "Akomodasi", deskripsi: "Akomodasi", nominal: Number(item.rp_akomodasi || 0) },
+    { id: "lain-lain", kategori: "Lain-lain", deskripsi: "Lain-lain", nominal: Number(item.rp_lain_lain || 0) }
+  ];
   return {
     ...common(item, "sppd", item.id_sppd),
     nomorDokumen: item.nomor_dokumen || item.no_sppd || `SPPD-${item.id_sppd}`,

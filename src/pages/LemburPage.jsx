@@ -277,6 +277,7 @@ export const LemburPage = ({
    const [tanggalLembur, setTanggalLembur] = useState("");
    const [jamMulai, setJamMulai] = useState("");
    const [jamSelesai, setJamSelesai] = useState("");
+   const [selectedShift, setSelectedShift] = useState("");
    const [kategoriLembur, setKategoriLembur] = useState("");
    const [jenisPekerjaan, setJenisPekerjaan] = useState("");
    const [areaGroup, setAreaGroup] = useState("");
@@ -412,17 +413,26 @@ export const LemburPage = ({
    const selectedBasis = availableBases.find((item) => `${item.type}:${item.reference_id}` === selectedBasisKey) || null;
    const isOperatorCuti = ["CUTI", "IJIN", "SAKIT"].includes(selectedBasis?.type) || jenisPekerjaan === "Pengganti Piket (Operator sedang cuti)";
    const isSiagaLibur = selectedBasis?.kode_jenis_pekerjaan === "SIAGA_HARI_LIBUR" || jenisPekerjaan === "Siaga / Libur Nasional";
+   const isShiftBasedOvertime = isOperatorCuti || isSiagaLibur;
+   const currentProjectNames = [
+      currentUser?.petugas?.project?.nama_project,
+      currentUser?.project?.nama_project,
+      currentUser?.nama_project,
+      currentUser?.projectName,
+      ...(currentUser?.projects || []).map((project) => project.nama_project),
+      ...(currentUser?.pegawai?.projects || []).map((project) => project.nama_project),
+   ].filter(Boolean).join(" ");
+   const isProjectOPGI = /(^|\s)opgi($|\s)|operator gardu induk/i.test(currentProjectNames);
+   const isAreaGiLocked = isProjectOPGI && ["CUTI", "IJIN", "SAKIT"].includes(selectedBasis?.type);
    const areActivityPhotosOptional = ["CUTI", "IJIN", "SAKIT"].includes(selectedBasis?.type) || selectedBasis?.kode_jenis_pekerjaan === "SIAGA_HARI_LIBUR" || isPhotoEvidenceOptional(kategoriLembur, jenisPekerjaan);
    const hourOptions = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
    const handleBasisChange = (key) => {
       setSelectedBasisKey(key); const basis = availableBases.find((item) => `${item.type}:${item.reference_id}` === key);
       if (!basis) return;
-      setTanggalLembur(basis.tanggal || basis.tanggal_mulai || ""); setKategoriLembur(basis.kategori_lembur || ""); setJenisPekerjaan(basis.jenis_pekerjaan || ""); setAreaGroup(basis.area_group || ""); setKegiatanDetail(basis.detail_pekerjaan || "");
+      setTanggalLembur(basis.tanggal || basis.tanggal_mulai || ""); setKategoriLembur(basis.kategori_lembur || ""); setJenisPekerjaan(basis.jenis_pekerjaan || ""); setAreaGroup(isProjectOPGI && ["CUTI", "IJIN", "SAKIT"].includes(basis.type) ? "Area GI" : basis.area_group || ""); setKegiatanDetail(basis.detail_pekerjaan || "");
       setPetugasPendampingNip(basis.petugas?.nip || ""); setIsHariLibur(basis.kode_jenis_pekerjaan === "SIAGA_HARI_LIBUR");
+      setSelectedShift(""); setJamMulai(""); setJamSelesai("");
    };
-   const isFixedEightHourMaker =
-      currentUser?.role === "maker" && (isOperatorCuti || isSiagaLibur);
-
    const filteredOfficers = replacementCandidates
       .filter((item) => item.is_active !== "N" && item.nip !== currentUser?.nip)
       .map((item) => ({
@@ -501,13 +511,6 @@ export const LemburPage = ({
       (officer) => String(officer.nip) === String(petugasPendampingNip),
    );
 
-   useEffect(() => {
-      if (isFixedEightHourMaker) {
-         setJamMulai("08:00");
-         setJamSelesai("16:00");
-      }
-   }, [isFixedEightHourMaker]);
-
    // Estimasi Biaya Rumus Rupiah hanya muncul dari proses Checker sampai Approver 3
    const isApprovalRole = [
       "checker",
@@ -557,6 +560,7 @@ export const LemburPage = ({
       setTanggalLembur(sub.tanggalLembur || "");
       setJamMulai(sub.jamMulai || "");
       setJamSelesai(sub.jamSelesai || "");
+      setSelectedShift(({ "07:00-15:00": "SHIFT_1", "15:00-23:00": "SHIFT_2", "23:00-07:00": "SHIFT_3" })[`${sub.jamMulai}-${sub.jamSelesai}`] || "");
       setKategoriLembur(sub.kategoriLembur || "");
       setJenisPekerjaan(sub.jenisPekerjaan || "");
       setAreaGroup(sub.areaGroup || "");
@@ -581,6 +585,7 @@ export const LemburPage = ({
       setTanggalLembur("");
       setJamMulai("");
       setJamSelesai("");
+      setSelectedShift("");
       setKategoriLembur("");
       setJenisPekerjaan("");
       setAreaGroup("");
@@ -647,15 +652,20 @@ export const LemburPage = ({
          setIsHariLibur(false);
       }
 
-      // Maker selalu mendapat durasi tetap 8 jam untuk Pengganti Piket / Siaga Libur.
-      if (
-         currentUser?.role === "maker" &&
-         (newVal === "Pengganti Piket (Operator sedang cuti)" ||
-            newVal === "Siaga / Libur Nasional")
-      ) {
-         setJamMulai("08:00");
-         setJamSelesai("16:00");
-      }
+      setSelectedShift("");
+      setJamMulai("");
+      setJamSelesai("");
+   };
+
+   const handleShiftChange = (shift) => {
+      const hours = {
+         SHIFT_1: ["07:00", "15:00"],
+         SHIFT_2: ["15:00", "23:00"],
+         SHIFT_3: ["23:00", "07:00"],
+      }[shift];
+      setSelectedShift(shift);
+      setJamMulai(hours?.[0] || "");
+      setJamSelesai(hours?.[1] || "");
    };
 
    const handleTanggalLemburChange = (val) => {
@@ -706,28 +716,30 @@ export const LemburPage = ({
       reader.readAsDataURL(file);
    };
 
-   const buildApiPayload = () => {
+   const buildApiPayload = ({ isCreate = false } = {}) => {
       const idPetugas =
          currentUser?.id_petugas || currentUser?.petugas?.id_petugas;
       const partner = allOfficers.find(
          (item) => item.nip === petugasPendampingNip,
       );
       const formData = new FormData();
-      formData.append("id_petugas", String(idPetugas || ""));
-      if (selectedBasis) {
+      if (isCreate) formData.append("id_petugas", String(idPetugas || ""));
+      if (isCreate && selectedBasis) {
          formData.append("dasar_lembur_type", selectedBasis.type);
          const fields = { SPKL: "id_spkl_petugas", CUTI: "id_cuti", IJIN: "id_ijin", SAKIT: "id_sakit" };
          formData.append(fields[selectedBasis.type], String(selectedBasis.reference_id));
       }
       if (showPetugasPendamping && partner?.id_petugas)
          formData.append("id_petugas_cuti", String(partner.id_petugas));
-      formData.append("tgl_lembur", tanggalLembur);
       formData.append("jam_mulai", jamMulai);
       formData.append("jam_selesai", jamSelesai);
-      formData.append("kategori_lembur", kategoriLembur);
-      formData.append("jenis_pekerjaan", jenisPekerjaan);
-      formData.append("area_group", areaGroup);
-      formData.append("is_hari_libur", isHariLibur ? "Y" : "N");
+      if (isCreate) {
+         formData.append("tgl_lembur", tanggalLembur);
+         formData.append("kategori_lembur", kategoriLembur);
+         formData.append("jenis_pekerjaan", jenisPekerjaan);
+         formData.append("area_group", areaGroup);
+         formData.append("is_hari_libur", isHariLibur ? "Y" : "N");
+      }
       formData.append("detail_pekerjaan_lembur", kegiatanDetail);
       formData.append(
          "keterangan",
@@ -765,7 +777,7 @@ export const LemburPage = ({
          );
       }
       const response = isCreate
-         ? await api.createLembur(buildApiPayload())
+         ? await api.createLembur(buildApiPayload({ isCreate: true }))
          : await api.updateLembur(editingSub.id_lembur, buildApiPayload());
       const saved = response?.data || response || {};
       const savedId =
@@ -2300,7 +2312,7 @@ export const LemburPage = ({
                                  handleTanggalLemburChange(e.target.value)
                               }
                               required
-                              readOnly={selectedBasis?.type === "SPKL"}
+                              readOnly={Boolean(editingSub) || selectedBasis?.type === "SPKL"}
                               className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none"
                            />
                         </div>
@@ -2313,7 +2325,7 @@ export const LemburPage = ({
                               value={areaGroup}
                               onChange={(e) => setAreaGroup(e.target.value)}
                               required
-                              disabled={selectedBasis?.type === "SPKL"}
+                               disabled={Boolean(editingSub) || selectedBasis?.type === "SPKL" || isAreaGiLocked}
                               className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none cursor-pointer"
                            >
                               <option value="">-- Pilih Group Area --</option>
@@ -2327,7 +2339,20 @@ export const LemburPage = ({
                         </div>
                      </div>
 
-                     <div className="grid grid-cols-2 gap-3">
+                      {isShiftBasedOvertime && (
+                         <div>
+                            <label className="block font-bold mb-1 text-slate-800">Shift Lembur</label>
+                            <select value={selectedShift} onChange={(e) => handleShiftChange(e.target.value)} required className="w-full h-11 px-3 bg-sky-50 border border-sky-300 rounded-xl text-slate-900 font-bold focus:outline-none cursor-pointer">
+                               <option value="">-- Pilih Shift --</option>
+                               <option value="SHIFT_1">SHIFT 1 (07.00 - 15.00)</option>
+                               <option value="SHIFT_2">SHIFT 2 (15.00 - 23.00)</option>
+                               <option value="SHIFT_3">SHIFT 3 (23.00 - 07.00)</option>
+                            </select>
+                            <p className="mt-1.5 text-[10px] font-semibold text-sky-700">Jam mulai dan selesai terisi otomatis berdasarkan shift.</p>
+                         </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                            <label className="block font-bold mb-1 text-slate-800">
                               Jam Mulai
@@ -2335,7 +2360,7 @@ export const LemburPage = ({
                            <select
                               value={jamMulai}
                               onChange={(e) => setJamMulai(e.target.value)}
-                              disabled={isFixedEightHourMaker}
+                               disabled={isShiftBasedOvertime}
                               required
                               className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none disabled:bg-slate-200 disabled:text-slate-700 disabled:cursor-not-allowed"
                            ><option value="">Pilih jam</option>{hourOptions.map((hour)=><option key={hour} value={hour}>{hour}</option>)}</select>
@@ -2348,16 +2373,16 @@ export const LemburPage = ({
                            <select
                               value={jamSelesai}
                               onChange={(e) => setJamSelesai(e.target.value)}
-                              disabled={isFixedEightHourMaker}
+                               disabled={isShiftBasedOvertime}
                               required
                               className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none disabled:bg-slate-200 disabled:text-slate-700 disabled:cursor-not-allowed"
                            ><option value="">Pilih jam</option>{hourOptions.map((hour)=><option key={hour} value={hour}>{hour}</option>)}</select>
                         </div>
                      </div>
 
-                     {isFixedEightHourMaker && (
+                      {isShiftBasedOvertime && selectedShift && (
                         <p className="-mt-1 text-[11px] font-bold text-sky-800 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
-                           Durasi otomatis 8 jam (08:00–16:00). Jam lembur dikunci untuk Maker.
+                           Durasi otomatis 8 jam sesuai shift yang dipilih. Jam mulai dan selesai dikunci.
                         </p>
                      )}
 

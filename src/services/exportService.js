@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import { formatRupiah, formatDateIndonesian, getStatusLabel, getFormattedDocNo } from "../utils/formatters";
 import { PdfService } from "./pdfService";
+import { appendOvertimeCorrection, filterReportTransactionsByView, formatReportUnitHierarchy } from "../utils/reportFormatting";
 export class ExportService {
   /**
    * Export Submissions Summary to Excel (.xlsx)
@@ -39,6 +40,8 @@ export class ExportService {
    * Export Approved 3 Report Resume to Excel (.xlsx) matching ReportPdfDocument.jsx columns
    */
   static exportReportToExcel(submissions = [], filterInfo = {}, signatories = [], filename = null) {
+    const reportView = String(filterInfo.reportView || filterInfo.reportLabel || "PLN").toUpperCase().replace(/\s+/g, "_");
+    const exportSubmissions = filterReportTransactionsByView(submissions, reportView);
     const defaultFilename = filterInfo.type
       ? `Laporan_Resume_${filterInfo.type.replace(/[\s/]+/g, "_")}_PLN.xlsx`
       : "Laporan_Resume_Semar.xlsx";
@@ -77,7 +80,7 @@ export class ExportService {
       ]
     ];
 
-    (submissions || []).forEach((sub, index) => {
+    exportSubmissions.forEach((sub, index) => {
       let nominal = 0;
       if (sub.type === "lembur") nominal = sub.estimasiBiayaRupiah || 0;
       if (sub.type === "sppd") nominal = sub.totalEstimasiBiaya || 0;
@@ -108,6 +111,7 @@ export class ExportService {
         const ket = sub.keterangan ? `: ${sub.keterangan}` : "";
         rincian = `${mksd}${rute}${ket}`;
       }
+      rincian = appendOvertimeCorrection(rincian, sub);
 
       const isNonBillableLembur =
         sub.type === "lembur" &&
@@ -129,7 +133,7 @@ export class ExportService {
         sub.employeeNip || sub.nip || "-",
         sub.employeeJabatan || "-",
         displayType,
-        sub.unitKerja || sub.unitUltg || sub.unitUpt || sub.unit || "-",
+        formatReportUnitHierarchy(sub),
         rincian,
         nominal ? formatRupiah(nominal) : "-",
         getStatusLabel(sub.status) || "DISETUJUI"

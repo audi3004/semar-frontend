@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
 import { DataService } from "../services/dataService";
-import { MasterDataService } from "../services/masterDataService";
 import { api } from "../services/api";
 import { mapWorkflowLembur, mapWorkflowCuti, mapWorkflowIjin, mapWorkflowSakit, mapWorkflowSppd } from "../utils/workflowSubmissionMapper";
 import { AttendanceChart } from "../components/charts/AttendanceChart";
@@ -338,7 +337,7 @@ export const DashboardPage = ({
   let totalJamApproved = 0;
   let countJamDiajukan = 0;
   let countJamApproved = 0;
-  let totalSelisihJamChecker = 0;
+  let totalJamSetelahRevisi = 0;
 
   lemburSubmissionsFiltered.forEach((s) => {
     const st = (s.status || "").toLowerCase();
@@ -346,6 +345,8 @@ export const DashboardPage = ({
     const jam = Number(s.durasiJam) || 0;
 
     totalJamDiajukan += jam;
+    const jamRevisi = Number(s.durasiJamApproved ?? s.jumlahJamKoreksi ?? jam);
+    totalJamSetelahRevisi += Number.isNaN(jamRevisi) ? jam : jamRevisi;
     countJamDiajukan += 1;
 
     if (isApproved) {
@@ -354,25 +355,16 @@ export const DashboardPage = ({
       countJamApproved += 1;
     }
 
-    // Kalkulasi selisih penyesuaian jam oleh checker
-    if (s.durasiJamApproved !== undefined && s.durasiJamApproved !== null && s.durasiJamApproved !== "") {
-      const jamApprove = Number(s.durasiJamApproved);
-      if (!isNaN(jamApprove) && jamApprove < jam) {
-        totalSelisihJamChecker += (jam - jamApprove);
-      }
-    }
   });
 
-  const hasPerubahanRevisi = totalSelisihJamChecker > 0;
-
-  const totalJamSetiapRevisi = hasPerubahanRevisi 
-    ? Math.max(0, totalJamDiajukan - totalSelisihJamChecker)
-    : totalJamDiajukan;
+  const selisihJamRevisi = totalJamSetelahRevisi - totalJamDiajukan;
+  const hasPerubahanRevisi = Math.abs(selisihJamRevisi) > 0.0001;
+  const totalJamSetiapRevisi = totalJamSetelahRevisi;
 
   const countJamSetiapRevisi = countJamDiajukan;
 
   const subLabelRevisi = hasPerubahanRevisi
-    ? `Selisih Checker: -${totalSelisihJamChecker} Jam`
+    ? `Selisih Koreksi: ${selisihJamRevisi > 0 ? "+" : ""}${selisihJamRevisi} Jam`
     : "Sama dengan Diajukan (Tanpa Revisi)";
 
   const top3HoursProcess = [
@@ -423,21 +415,54 @@ export const DashboardPage = ({
   let countBiayaApproved = 0;
   let countBiayaPending = 0;
 
+  const getOvertimeFactor = (hours, isHoliday) => {
+    const duration = Math.max(0, Number(hours) || 0);
+    if (duration <= 0) return 0;
+    if (isHoliday) {
+      return (Math.min(duration, 8) * 2)
+        + (duration > 8 ? Math.min(duration - 8, 1) * 3 : 0)
+        + (duration > 9 ? (duration - 9) * 4 : 0);
+    }
+    return Math.min(duration, 1) * 1.5 + Math.max(duration - 1, 0) * 2;
+  };
+
+  const calculateLemburCostByHours = (submission, hours) => {
+    const requestedFactor = getOvertimeFactor(hours, submission.isHariLibur);
+    if (requestedFactor <= 0) return 0;
+
+    let hourlyRate = Number(submission.tarifLembur) || 0;
+    if (hourlyRate <= 0) {
+      // Kompatibilitas data lama: biaya_lembur tersimpan berdasarkan jam efektif.
+      const effectiveHours = Number(
+        submission.jumlahJamKoreksi ?? submission.durasiJamApproved ?? submission.durasiJam ?? 0
+      ) || 0;
+      const effectiveFactor = getOvertimeFactor(effectiveHours, submission.isHariLibur);
+      const storedCost = Number(submission.estimasiBiayaRupiah ?? submission.biayaLembur ?? 0) || 0;
+      if (effectiveFactor > 0 && storedCost > 0) hourlyRate = storedCost / effectiveFactor;
+    }
+
+    return hourlyRate > 0 ? Math.ceil(hourlyRate * requestedFactor) : 0;
+  };
+
   lemburSubmissionsFiltered.forEach((s) => {
     const st = (s.status || "").toLowerCase();
     const isApproved = ["approved", "disetujui", "completed", "acc", "approved_2", "selesai"].includes(st);
-    // Nilai biaya dari backend sudah merupakan total transaksi berdasarkan jam lembur.
-    // Frontend hanya mengelompokkan nominal tersebut berdasarkan status workflow.
-    const transactionCost = Number(s.estimasiBiayaRupiah ?? s.biayaLembur ?? 0) || 0;
+    const submittedHours = Number(s.durasiJam) || 0;
+    const correctedHours = Number(s.jumlahJamKoreksi ?? s.durasiJamApproved ?? submittedHours);
+    const submittedCost = calculateLemburCostByHours(s, submittedHours);
+    const effectiveCost = calculateLemburCostByHours(
+      s,
+      Number.isNaN(correctedHours) ? submittedHours : correctedHours
+    );
     
-    totalBiayaLemburDiajukan += transactionCost;
+    totalBiayaLemburDiajukan += submittedCost;
     countBiayaDiajukan += 1;
 
     if (isApproved) {
-      totalBiayaLemburApproved += transactionCost;
+      totalBiayaLemburApproved += effectiveCost;
       countBiayaApproved += 1;
     } else {
-      totalBiayaLemburPending += transactionCost;
+      totalBiayaLemburPending += effectiveCost;
       countBiayaPending += 1;
     }
   });
@@ -449,7 +474,7 @@ export const DashboardPage = ({
     {
       rank: 1,
       title: "Total Biaya Diajukan",
-      subLabel: "Akumulasi Seluruh Pengajuan",
+      subLabel: "Berdasarkan Jam Pengajuan Maker",
       amount: totalBiayaLemburDiajukan,
       count: countBiayaDiajukan,
       pct: 100,
@@ -460,7 +485,7 @@ export const DashboardPage = ({
     {
       rank: 2,
       title: "Biaya Status Disetujui",
-      subLabel: "Realisasi Approval",
+      subLabel: "Berdasarkan Jam Koreksi yang Disetujui",
       amount: totalBiayaLemburApproved,
       count: countBiayaApproved,
       pct: totalBiayaLemburDiajukan > 0 ? Math.round((totalBiayaLemburApproved / totalBiayaLemburDiajukan) * 100) : 0,
@@ -471,7 +496,7 @@ export const DashboardPage = ({
     {
       rank: 3,
       title: "Biaya Menunggu Approval",
-      subLabel: "Dalam Proses Review",
+      subLabel: "Berdasarkan Jam Efektif Saat Ini",
       amount: totalBiayaLemburPending,
       count: countBiayaPending,
       pct: totalBiayaLemburDiajukan > 0 ? Math.round((totalBiayaLemburPending / totalBiayaLemburDiajukan) * 100) : 0,
@@ -534,7 +559,7 @@ export const DashboardPage = ({
     const categoryMap = {};
 
     lemburSubmissionsFiltered.forEach((sub) => {
-      let key = "Lainnya";
+      let key = "Kategori Belum Diisi";
       if (paretoGroupBy === "unit") {
         key = sub.unitUltg || sub.unitUpt || sub.garduInduk || sub.ultg || sub.upt || "UPT Semarang";
       } else if (paretoGroupBy === "unit GI" || paretoGroupBy === "gi") {
@@ -585,59 +610,26 @@ export const DashboardPage = ({
     return count > 0 ? count : 1;
   }, [paretoData]);
 
-  // Task 1: Get master categories dynamically from MasterDataService
-  const masterLemburCategories = (() => {
-    try {
-      MasterDataService.initLocalStorage();
-      const list = MasterDataService.getAll("m_lembur", { limit: 9999 }).data || [];
-      return list.map(item => item.kat_lembur).filter(Boolean);
-    } catch (e) {
-      console.error("Gagal mengambil master kategori lembur:", e);
-      return [];
-    }
-  })();
-
-  const categoryCountMap = {};
-  masterLemburCategories.forEach((cat) => {
-    categoryCountMap[cat] = 0;
-  });
-
-  // Increment counts based on filtered submissions
+  // Kategori dashboard mengikuti snapshot yang tersimpan pada transaksi.
+  // Jenis pekerjaan hanya menjadi fallback untuk data legacy tanpa kategori.
+  const categoryCountMap = new Map();
   lemburSubmissionsFiltered.forEach((s) => {
-    const subCat = (s.kategoriLembur || s.jenisPekerjaan || "").toLowerCase().trim();
-    let matchedCat = null;
-    for (const cat of masterLemburCategories) {
-      const target = cat.toLowerCase().trim();
-      if (subCat.includes(target) || target.includes(subCat) || 
-          (subCat === "manuver" && target.includes("manuver")) ||
-          (subCat.includes("piket") && target.includes("piket"))) {
-        matchedCat = cat;
-        break;
-      }
-    }
-    
-    if (matchedCat) {
-      categoryCountMap[matchedCat] = (categoryCountMap[matchedCat] || 0) + 1;
-    } else {
-      // Fuzzy matching by individual words
-      const words = subCat.split(/\s+/);
-      for (const cat of masterLemburCategories) {
-        const target = cat.toLowerCase();
-        if (words.some(word => word.length > 3 && target.includes(word))) {
-          matchedCat = cat;
-          break;
-        }
-      }
-      if (matchedCat) {
-        categoryCountMap[matchedCat] = (categoryCountMap[matchedCat] || 0) + 1;
-      } else {
-        categoryCountMap["Lainnya"] = (categoryCountMap["Lainnya"] || 0) + 1;
-      }
-    }
+    const label = String(
+      s.kategoriLembur ||
+      s.jenisPekerjaan ||
+      s.pekerjaan ||
+      "Kategori Belum Diisi"
+    ).trim();
+    const normalized = label.toLocaleLowerCase("id-ID");
+    const current = categoryCountMap.get(normalized);
+    categoryCountMap.set(normalized, {
+      name: current?.name || label,
+      count: (current?.count || 0) + 1
+    });
   });
 
-  const sortedCategories = Object.entries(categoryCountMap)
-    .filter(([_, value]) => value > 0)
+  const sortedCategories = Array.from(categoryCountMap.values())
+    .map(({ name, count }) => [name, count])
     .sort((a, b) => b[1] - a[1]);
 
   let topCategoryName = "-";
@@ -888,7 +880,7 @@ export const DashboardPage = ({
   };
   const lemburCategoryMap = {};
   lemburSubs.forEach((s) => {
-    const cat = s.kategoriLembur || s.jenisPekerjaan || "Lainnya";
+    const cat = s.kategoriLembur || s.jenisPekerjaan || s.pekerjaan || "Kategori Belum Diisi";
     if (!lemburCategoryMap[cat]) lemburCategoryMap[cat] = { count: 0, hours: 0 };
     lemburCategoryMap[cat].count += 1;
     lemburCategoryMap[cat].hours += Number(s.durasiJam) || 0;

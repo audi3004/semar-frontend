@@ -21,6 +21,7 @@ import semarLogo from "../../assets/logo_semar_trns.png";
 import { DOCUMENT_LETTERHEAD } from "./documentLetterhead";
 import { resolveSubmissionStatus } from "../../utils/submissionStatus";
 import { resolveSubmissionWorkUnits } from "../../utils/submissionWorkUnits";
+import { getStaticSppdExpenses } from "../../utils/sppdExpenses";
 
 const plnLogo = PLN_LOGO_PNG_BASE64;
 
@@ -746,10 +747,11 @@ export const SubmissionPdfDocument = ({
       showSppdNominal = !isMakerCheckerApp1;
    }
 
+   const sppdExpenses = getStaticSppdExpenses(submission);
    const calculatedTotalSppd =
       submission.totalEstimasiBiaya && Number(submission.totalEstimasiBiaya) > 0
          ? Number(submission.totalEstimasiBiaya)
-         : (submission.expenses || []).reduce(
+          : sppdExpenses.reduce(
               (acc, e) => acc + (Number(e.nominal) || 0),
               0,
            );
@@ -1127,8 +1129,8 @@ export const SubmissionPdfDocument = ({
                            Sisa Cuti Pasca Pengajuan:
                         </Text>
                         <Text style={styles.detailValue}>
-                           {submission.sisaCutiSesudahnya} Hari (Sebelumnya:{" "}
-                           {submission.sisaCutiSebelumnya || "-"} Hari)
+                           {submission.sisaCutiSesudahnya ?? "-"} Hari (Sebelumnya:{" "}
+                           {submission.sisaCutiSebelumnya ?? "-"} Hari)
                         </Text>
                      </View>
                      <View style={styles.detailFull}>
@@ -1335,14 +1337,6 @@ export const SubmissionPdfDocument = ({
                               {formatDateIndonesian(submission.tanggalKembali)}
                            </Text>
                         </View>
-                        <View style={styles.detailItem}>
-                           <Text style={styles.detailLabel}>
-                              Beban Anggaran Unit:
-                           </Text>
-                           <Text style={styles.detailValue}>
-                              {submission.bebanAnggaranUnit || "-"}
-                           </Text>
-                        </View>
                         <View style={styles.detailFull}>
                            <Text style={styles.detailLabel}>
                               Maksud Perjalanan Dinas:
@@ -1383,15 +1377,7 @@ export const SubmissionPdfDocument = ({
                                  styles.tableCellDesc,
                               ]}
                            >
-                              Rincian Komponen Biaya
-                           </Text>
-                           <Text
-                              style={[
-                                 styles.tableHeaderCell,
-                                 styles.tableCellCat,
-                              ]}
-                           >
-                              Kategori
+                               Komponen Biaya
                            </Text>
                            <Text
                               style={[
@@ -1403,13 +1389,10 @@ export const SubmissionPdfDocument = ({
                            </Text>
                         </View>
 
-                        {submission.expenses?.map((exp) => (
+                         {sppdExpenses.map((exp) => (
                            <View key={exp.id} style={styles.tableRow}>
                               <Text style={styles.tableCellDesc}>
                                  {exp.deskripsi}
-                              </Text>
-                              <Text style={styles.tableCellCat}>
-                                 {exp.kategori}
                               </Text>
                               <Text style={styles.tableCellNominal}>
                                  {showSppdNominal
@@ -1428,7 +1411,6 @@ export const SubmissionPdfDocument = ({
                            >
                               TOTAL ESTIMASI SPPD:
                            </Text>
-                           <Text style={styles.tableCellCat} />
                            <Text
                               style={[
                                  styles.tableCellNominal,
